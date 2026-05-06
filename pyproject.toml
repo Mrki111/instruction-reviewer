@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instruction-reviewer"
+version = "0.1.0"
+description = "Review PR diffs and commits against bundled/team rules and base-ref instruction files."
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.99,<1.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+instruction-reviewer = "reviewer.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["reviewer*"]
+
+[tool.setuptools.package-data]
+reviewer = ["default-rules.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

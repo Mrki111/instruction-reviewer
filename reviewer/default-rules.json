@@ -1,0 +1,87 @@
+{
+  "rules": [
+    {
+      "id": "TESTS_001",
+      "enabled": true,
+      "severity": "medium",
+      "description": "Source files changed but no tests were modified.",
+      "test_patterns": [
+        "tests/**",
+        "test/**",
+        "**/__tests__/**",
+        "test_*.py",
+        "*_test.py",
+        "*.test.ts",
+        "*.test.tsx",
+        "*.test.js",
+        "*.test.jsx",
+        "*.spec.ts",
+        "*.spec.tsx",
+        "*.spec.js",
+        "*.spec.jsx",
+        "*_test.go",
+        "*_spec.rb"
+      ],
+      "source_patterns": [
+        "*.py",
+        "*.ts",
+        "*.tsx",
+        "*.js",
+        "*.jsx",
+        "*.go",
+        "*.rb",
+        "*.rs",
+        "*.java",
+        "*.kt",
+        "*.swift"
+      ]
+    },
+    {
+      "id": "INSTR_001",
+      "enabled": true,
+      "severity": "low",
+      "description": "Instruction file (AGENTS.md / CLAUDE.md) was modified in this PR.",
+      "instruction_filenames": ["AGENTS.md", "CLAUDE.md"]
+    },
+    {
+      "id": "COMMITS_001",
+      "enabled": true,
+      "severity": "low",
+      "description": "Commit subject exceeds the configured length.",
+      "max_subject_length": 72
+    },
+    {
+      "id": "COMMITS_002",
+      "enabled": true,
+      "severity": "medium",
+      "description": "Commit body is empty for a non-trivial diff.",
+      "min_files_for_body": 3
+    },
+    {
+      "id": "SIZE_001",
+      "enabled": true,
+      "severity": "medium",
+      "description": "PR exceeds the configured size threshold.",
+      "max_lines_changed": 1000
+    },
+    {
+      "id": "SECRETS_001",
+      "enabled": true,
+      "severity": "high",
+      "description": "Diff contains text that looks like a secret or credential."
+    },
+    {
+      "id": "INSTRUCTIONS_COMPLIANCE_001",
+      "enabled": true,
+      "severity": "medium",
+      "description": "LLM-based check: ask Claude whether the diff or commit messages violate any rule from AGENTS.md / CLAUDE.md.",
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 4096,
+      "max_diff_chars": 200000,
+      "timeout_seconds": 120,
+      "max_retries": 2,
+      "fail_open": true,
+      "fail_open_severity": "low"
+    }
+  ]
+}

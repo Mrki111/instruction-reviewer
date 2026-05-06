@@ -1,0 +1,89 @@
+name: Instruction Reviewer
+description: Review PR diffs and commits against bundled/team rules and base-ref instruction files.
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  instructions:
+    description: Comma- or newline-separated glob(s) for instruction files. Defaults to AGENTS.md and CLAUDE.md.
+    required: false
+    default: ""
+  rules:
+    description: Path to a user rules JSON. Defaults to .github/instruction-rules.json when present.
+    required: false
+    default: ""
+  checks-module:
+    description: Comma- or newline-separated Python module names or .py files that register custom checks.
+    required: false
+    default: ""
+  fail-on:
+    description: Severity threshold that fails the job (low|medium|high).
+    required: false
+    default: high
+  base-ref:
+    description: Base ref to diff against. Defaults to the PR base SHA from the event.
+    required: false
+    default: ""
+  comment-on-pr:
+    description: Post a sticky comment on the PR with the report.
+    required: false
+    default: "true"
+  github-token:
+    description: Token for posting the sticky comment. Pass `${{ secrets.GITHUB_TOKEN }}`.
+    required: false
+    default: ""
+  anthropic-api-key:
+    description: |
+      Anthropic API key for INSTRUCTIONS_COMPLIANCE_001 (the LLM-based check that verifies the diff
+      against AGENTS.md / CLAUDE.md). When omitted, the default fail_open behavior emits a low-severity
+      skip finding. Set fail_open: false in .github/instruction-rules.json for strict fail-closed repos.
+    required: false
+    default: ""
+
+outputs:
+  report-path:
+    description: Path to the markdown report inside the runner.
+    value: ${{ steps.review.outputs.report-path }}
+  fail-count:
+    description: Number of findings at or above the fail-on threshold.
+    value: ${{ steps.review.outputs.fail-count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install reviewer
+      shell: bash
+      run: pip install "${{ github.action_path }}"
+
+    - name: Run reviewer
+      id: review
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+      run: |
+        BASE="${{ inputs.base-ref }}"
+        if [ -z "$BASE" ]; then
+          BASE="${{ github.event.pull_request.base.sha }}"
+        fi
+        HEAD="${{ github.event.pull_request.head.sha || github.sha }}"
+        if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+          echo "::error::Could not resolve base/head refs. Provide base-ref explicitly or run on pull_request events." >&2
+          exit 2
+        fi
+        python -m reviewer \
+          --base-ref "$BASE" \
+          --head-ref "$HEAD" \
+          --instructions "${{ inputs.instructions }}" \
+          --rules "${{ inputs.rules }}" \
+          --checks-module "${{ inputs.checks-module }}" \
+          --fail-on "${{ inputs.fail-on }}" \
+          --comment-on-pr "${{ inputs.comment-on-pr }}" \
+          --repo-root "${{ github.workspace }}" \
+          --github-output

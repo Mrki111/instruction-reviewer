@@ -1,0 +1,249 @@
+# Instruction Reviewer
+
+A GitHub Action and Python CLI that checks whether PR changes follow the repository's Markdown guidelines, including `AGENTS.md`, `CLAUDE.md`, `REVIEW.md`, and team instruction files.
+
+Instruction Reviewer turns repo instruction files from passive guidance into an enforceable CI signal. It is built for teams using AI-assisted development who want to verify that generated or human-written changes actually followed the rules documented in the repo.
+
+Drop one workflow file into a repo and you get:
+
+- A markdown report on the workflow run page (Step Summary).
+- Inline annotations in the PR's "Files changed" tab for findings with a known location.
+- A single sticky comment on the PR that updates on each push.
+- A `fail-count` output and an exit code that fails the job above a configurable severity threshold.
+- Optional project-level overrides from `.github/instruction-rules.json`.
+- Optional custom checks loaded from a project Python module.
+
+## Quick start
+
+Add this to a consumer repo at `.github/workflows/instruction-review.yml`:
+
+```yaml
+name: Instruction Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for base..head diff
+      - uses: infinum/instruction-reviewer@v0.1.0
+        with:
+          fail-on: high
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}   # enables the LLM check
+```
+
+That's the whole adoption story. Defaults are bundled, and `.github/instruction-rules.json` is picked up automatically when present.
+
+> The `INSTRUCTIONS_COMPLIANCE_001` LLM check is enabled by default. When `anthropic-api-key` is missing it emits a low-severity skip finding by default instead of breaking every repo; set `fail_open: false` for strict repos that must fail when the LLM review cannot run.
+
+## Inputs
+
+| Name            | Default            | Description                                                                 |
+|-----------------|--------------------|-----------------------------------------------------------------------------|
+| `instructions`      | `**/AGENTS.md,**/CLAUDE.md` | Comma- or newline-separated globs for instruction files.            |
+| `rules`             | `.github/instruction-rules.json` at base ref if present | Path to a user rules JSON. Repo-relative paths are read from `base-ref` and merged onto bundled defaults by `id`. |
+| `checks-module`     | `""`               | Optional Python module name or `.py` file that registers custom checks with `reviewer.checks.register()`. |
+| `fail-on`           | `high`             | `low`, `medium`, or `high` — severity at or above this fails the job.       |
+| `base-ref`          | PR base SHA        | Override the base ref. Auto-detected from the `pull_request` event.         |
+| `comment-on-pr`     | `true`             | Whether to post the sticky PR comment.                                      |
+| `github-token`      | `""`               | Required only when `comment-on-pr: true`.                                   |
+| `anthropic-api-key` | `""`               | Required for the LLM check to call Anthropic. Missing keys skip by default unless `fail_open: false`. |
+
+## Outputs
+
+| Name          | Description                                                |
+|---------------|------------------------------------------------------------|
+| `report-path` | Path to the markdown report inside the runner.             |
+| `fail-count`  | Number of findings at or above the `fail-on` threshold.    |
+
+## Bundled rules
+
+Rules ship in [`reviewer/default-rules.json`](reviewer/default-rules.json):
+
+| Id                          | Severity | What it checks                                                                                                |
+|-----------------------------|----------|---------------------------------------------------------------------------------------------------------------|
+| `TESTS_001`                 | medium   | Source files changed but no tests touched.                                                                    |
+| `INSTR_001`                 | low      | `AGENTS.md` / `CLAUDE.md` was modified in this PR.                                                            |
+| `COMMITS_001`               | low      | Commit subject exceeds 72 chars.                                                                              |
+| `COMMITS_002`               | medium   | Commit body is empty for non-trivial diffs (≥ 3 files).                                                       |
+| `SIZE_001`                  | medium   | PR exceeds 1 000 changed lines.                                                                               |
+| `SECRETS_001`               | high     | Diff contains text that looks like a secret.                                                                  |
+| `INSTRUCTIONS_COMPLIANCE_001` | medium | **LLM check.** Sends scoped instructions + scoped diff + commits to Claude Sonnet 4.6 and reports any violations it identifies. |
+
+### `INSTRUCTIONS_COMPLIANCE_001` — the LLM compliance check
+
+This is the rule that actually verifies *"did the AI follow the rules in CLAUDE.md?"* — the others are hygiene heuristics. It does the following:
+
+1. Loads instruction files from the PR base SHA, not from the PR head. Repo-relative rule overrides are also loaded from the base SHA.
+2. Applies instruction files by directory scope. Root `AGENTS.md` / `CLAUDE.md` apply everywhere; nested files apply only to changed files under their directory.
+3. Reviews each instruction scope separately, so nested rules are not applied to unrelated files.
+4. Refuses to call Anthropic when added diff lines or commit messages look like credentials, so suspected secrets are not sent to the provider.
+5. Sends the applicable instructions, scoped unified diff, and commit messages to `claude-sonnet-4-6` via the Anthropic API, with a system prompt that asks for *violations only* (not compliance, not unrelated rules).
+6. Receives a structured JSON list of findings (rule excerpt, severity, file/line) via `output_config.format` with a `json_schema`.
+7. Validates LLM-reported paths/lines against changed files in that scope before emitting annotations.
+8. Returns those findings just like every other check — they appear in the report, the sticky comment, the annotations, and count toward the `fail-on` threshold.
+
+The instruction-files block is sent with `cache_control: ephemeral` so subsequent PRs in the same repo hit the prompt cache (~10× cheaper input tokens).
+
+When `ANTHROPIC_API_KEY` is missing, applicable base-ref instruction files exist, and the rule is enabled, the default `fail_open: true` behavior emits a low-severity skip finding. To opt out entirely, disable the rule:
+
+```json
+{ "rules": [{ "id": "INSTRUCTIONS_COMPLIANCE_001", "enabled": false }] }
+```
+
+Tunable knobs (defaults shown):
+
+```json
+{
+  "id": "INSTRUCTIONS_COMPLIANCE_001",
+  "model": "claude-sonnet-4-6",
+  "max_tokens": 4096,
+  "max_diff_chars": 200000,
+  "timeout_seconds": 120,
+  "max_retries": 2,
+  "fail_open": true,
+  "fail_open_severity": "low"
+}
+```
+
+`max_diff_chars` is a soft circuit-breaker — diffs larger than this skip the LLM call and emit a single low-severity bail finding instead. Raise it for legitimately large refactors, lower it to keep costs predictable.
+
+`fail_open: true` means missing API keys and Anthropic API/network/JSON response failures are reported as low-severity findings instead of aborting the whole run. Set it to `false` in strict repos if LLM review availability must block merges.
+
+The rule's `severity` is a **ceiling**, not a default. The LLM may downgrade an individual finding (e.g. emit `low` under a `medium` rule) but cannot escalate past it. Configure the rule at the highest severity you ever want it to surface at.
+
+For a real merge gate, use one of these strict configurations:
+
+```json
+{ "rules": [{ "id": "INSTRUCTIONS_COMPLIANCE_001", "fail_open": false }] }
+```
+
+or:
+
+```json
+{ "rules": [{ "id": "INSTRUCTIONS_COMPLIANCE_001", "fail_open_severity": "high" }] }
+```
+
+Then pair it with `fail-on: high` (or lower) in the workflow.
+
+**Cost order of magnitude:** with caching, a typical PR (≤ 50K-char diff, ~5K-token instructions) costs roughly a few cents per run on Sonnet 4.6 — first run in the cache window pays full input price; subsequent runs within ~5 minutes hit the cache.
+
+The report header includes an `LLM tokens:` line summing input/output/cache-read/cache-create across all per-scope calls, so you can verify both cost and that the prompt cache is actually working. The same numbers are emitted as a `kind: "diagnostic"` finding with `metadata.usage` in the JSON report (`--json-path`); diagnostics never count toward the `fail-on` threshold.
+
+## Customizing rules
+
+Rules merge **by id**. To disable a default rule or tweak its config, drop this file into the consumer repo at `.github/instruction-rules.json`:
+
+```json
+{
+  "rules": [
+    { "id": "SIZE_001", "max_lines_changed": 2000 },
+    { "id": "TESTS_001", "enabled": false },
+    {
+      "id": "TEAM_001",
+      "enabled": true,
+      "severity": "low",
+      "description": "Custom rule implemented in .github/instruction_checks.py."
+    }
+  ]
+}
+```
+
+Fields you don't set inherit from the default. Unknown ids are appended and reported as warnings unless a custom checks module registers an implementation.
+
+You can also pass `rules:` explicitly if a project keeps rule overrides somewhere else.
+
+### Custom checks
+
+Custom checks are normal Python functions registered with `reviewer.checks.register()`. Put this in a consumer repo, for example at `.github/instruction_checks.py`:
+
+```python
+from reviewer.checks import Finding, register
+
+
+@register("TEAM_001")
+def check_team_rule(rule, diff, commits, instructions):
+    if any(file.path == "danger.txt" for file in diff.files):
+        return [Finding(rule.id, rule.severity, "danger.txt should not change.", "danger.txt")]
+    return []
+```
+
+Then wire it into the workflow and rules:
+
+```yaml
+- uses: infinum/instruction-reviewer@v0
+  with:
+    checks-module: .github/instruction_checks.py
+```
+
+```json
+{ "rules": [{ "id": "TEAM_001", "severity": "high" }] }
+```
+
+Repo-relative custom check files are loaded from the PR base ref, not from the PR head, so a PR cannot weaken its own configured custom checks. Absolute paths remain trusted local escape hatches for CLI usage, and importable module names are resolved outside the reviewed repo when a base ref is active.
+
+## Rollout guidance
+
+- Start with `fail-on: high` so only high-severity findings fail builds by default.
+- Keep medium/low findings visible in the PR report while teams tune false positives.
+- Move mature repos to `fail-on: medium` once default rules match the team's expectations.
+- Watch the `LLM compliance:` line in the report header to confirm the load-bearing rule is actually running. `skipped — …` over multiple PRs in a row means a config/secret problem, not a clean run.
+
+### Fork PRs and `pull_request_target`
+
+The default `pull_request` event does **not** expose secrets to PRs from forks, so the LLM check fail-opens on those PRs. If you want the check to run on fork PRs, switch to `pull_request_target` — but be aware:
+
+- `pull_request_target` runs in the context of the **base** repo, so `actions/checkout@v4` defaults to checking out the base ref. The diff would compute against itself and find nothing. You **must** check out `head.sha` explicitly:
+  ```yaml
+  - uses: actions/checkout@v4
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
+      fetch-depth: 0
+  ```
+- Doing this means the workflow executes against a checkout from a fork PR with secret access. Treat the workflow file itself as the trust boundary: do not run untrusted scripts (test runners, build scripts, lint hooks the PR author can edit) in the same job. The reviewer disables `checks-module` on `pull_request_target` because custom checks are Python loaded from the checkout. The built-in checks and bundled rules still run.
+
+## Running locally
+
+```sh
+pip install -e .
+python -m reviewer \
+  --base-ref main \
+  --head-ref HEAD \
+  --repo-root . \
+  --report-path /tmp/review.md
+```
+
+The CLI exits non-zero if any finding is at or above `--fail-on` (default `high`).
+
+## Repo layout
+
+```
+.
+├── action.yml                       # the public action contract
+├── reviewer/
+│   ├── __init__.py
+│   ├── __main__.py                  # `python -m reviewer`
+│   ├── cli.py                       # argparse + orchestration
+│   ├── checks.py                    # rule implementations + Finding + severity gate
+│   ├── diff.py                      # build_pr_diff(base, head) via git
+│   ├── rules.py                     # load + merge by id
+│   ├── default-rules.json           # bundled defaults
+│   └── reporters/
+│       ├── markdown.py              # the report
+│       ├── github.py                # step summary, annotations, sticky comment, $GITHUB_OUTPUT
+│       └── json_report.py           # machine-readable output
+├── tests/
+└── pyproject.toml
+```
+
+## Versioning
+
+- Pin to `@v0` while the project is pre-1.0. The `vX` major-version tag is updated automatically by the release workflow on every `vX.Y.Z` push.
+- Default rules are versioned with the action: a change to defaults is a major-version bump.

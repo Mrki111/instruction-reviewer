@@ -1,0 +1,6 @@
+{
+  "rules": [
+    { "id": "SIZE_001", "max_lines_changed": 1500 },
+    { "id": "COMMITS_001", "max_subject_length": 80 }
+  ]
+}

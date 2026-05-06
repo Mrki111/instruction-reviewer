@@ -1,0 +1,32 @@
+name: Anthropic API smoke
+# Daily live call against the Anthropic API. The mocked unit tests confirm
+# our internal logic; this workflow confirms the SDK/API contract still holds.
+# If this starts failing, INSTRUCTIONS_COMPLIANCE_001 is silently fail-opening
+# in production and we need to fix it before the next release.
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[test]"
+      - name: Live compliance call
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY secret is not configured"
+            exit 1
+          fi
+          pytest tests/test_anthropic_smoke.py -v
