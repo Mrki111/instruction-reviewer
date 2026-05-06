@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "instruction-reviewer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Review PR diffs and commits against bundled/team rules and base-ref instruction files."
 requires-python = ">=3.11"
 dependencies = [
