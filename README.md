@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0   # full history for base..head diff
       - uses: infinum/instruction-reviewer@v0.1.0
         with:
-          fail-on: high
+          fail-on: medium
           github-token: ${{ secrets.GITHUB_TOKEN }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}   # enables the LLM check
 ```
@@ -42,6 +42,7 @@ jobs:
 That's the whole adoption story. Defaults are bundled, and `.github/instruction-rules.json` is picked up automatically when present.
 
 > The `INSTRUCTIONS_COMPLIANCE_001` LLM check is enabled by default. When `anthropic-api-key` is missing it emits a low-severity skip finding by default instead of breaking every repo; set `fail_open: false` for strict repos that must fail when the LLM review cannot run.
+> The default `fail-on: medium` means medium and high findings fail CI, including default LLM instruction-compliance violations.
 
 ## Inputs
 
@@ -50,7 +51,7 @@ That's the whole adoption story. Defaults are bundled, and `.github/instruction-
 | `instructions`      | `**/AGENTS.md,**/CLAUDE.md` | Comma- or newline-separated globs for instruction files.            |
 | `rules`             | `.github/instruction-rules.json` at base ref if present | Path to a user rules JSON. Repo-relative paths are read from `base-ref` and merged onto bundled defaults by `id`. |
 | `checks-module`     | `""`               | Optional Python module name or `.py` file that registers custom checks with `reviewer.checks.register()`. |
-| `fail-on`           | `high`             | `low`, `medium`, or `high` — severity at or above this fails the job.       |
+| `fail-on`           | `medium`           | `low`, `medium`, or `high` — severity at or above this fails the job.       |
 | `base-ref`          | PR base SHA        | Override the base ref. Auto-detected from the `pull_request` event.         |
 | `comment-on-pr`     | `true`             | Whether to post the sticky PR comment.                                      |
 | `github-token`      | `""`               | Required only when `comment-on-pr: true`.                                   |
@@ -92,6 +93,10 @@ This is the rule that actually verifies *"did the AI follow the rules in CLAUDE.
 
 The instruction-files block is sent with `cache_control: ephemeral` so subsequent PRs in the same repo hit the prompt cache (~10× cheaper input tokens).
 
+### Data sent to Anthropic
+
+When `INSTRUCTIONS_COMPLIANCE_001` runs with `ANTHROPIC_API_KEY` set, it sends the applicable base-ref instruction files, scoped unified diff hunks, and commit messages to Anthropic. It does not send the full repository checkout. Before any LLM call, the reviewer scans added diff lines and commit messages for likely credentials; if a suspected secret is found, the LLM check is skipped for that run so the payload is not sent to Anthropic.
+
 When `ANTHROPIC_API_KEY` is missing, applicable base-ref instruction files exist, and the rule is enabled, the default `fail_open: true` behavior emits a low-severity skip finding. To opt out entirely, disable the rule:
 
 ```json
@@ -131,7 +136,7 @@ or:
 { "rules": [{ "id": "INSTRUCTIONS_COMPLIANCE_001", "fail_open_severity": "high" }] }
 ```
 
-Then pair it with `fail-on: high` (or lower) in the workflow.
+The default `fail-on: medium` blocks default LLM instruction violations. Use `fail-on: high` only if you want instruction findings below high severity to remain advisory.
 
 **Cost order of magnitude:** with caching, a typical PR (≤ 50K-char diff, ~5K-token instructions) costs roughly a few cents per run on Sonnet 4.6 — first run in the cache window pays full input price; subsequent runs within ~5 minutes hit the cache.
 
@@ -191,9 +196,9 @@ Repo-relative custom check files are loaded from the PR base ref, not from the P
 
 ## Rollout guidance
 
-- Start with `fail-on: high` so only high-severity findings fail builds by default.
-- Keep medium/low findings visible in the PR report while teams tune false positives.
-- Move mature repos to `fail-on: medium` once default rules match the team's expectations.
+- Start with the default `fail-on: medium` when instruction compliance should block merges.
+- Use `fail-on: high` during early rollout if you want only high-severity findings to fail builds.
+- Keep low findings visible in the PR report while teams tune false positives.
 - Watch the `LLM compliance:` line in the report header to confirm the load-bearing rule is actually running. `skipped — …` over multiple PRs in a row means a config/secret problem, not a clean run.
 
 ### Fork PRs and `pull_request_target`
@@ -220,7 +225,7 @@ python -m reviewer \
   --report-path /tmp/review.md
 ```
 
-The CLI exits non-zero if any finding is at or above `--fail-on` (default `high`).
+The CLI exits non-zero if any finding is at or above `--fail-on` (default `medium`).
 
 ## Repo layout
 

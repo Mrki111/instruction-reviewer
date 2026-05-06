@@ -10,9 +10,9 @@ import os
 
 import pytest
 
-from reviewer.checks import check_instructions_compliance
 from reviewer.diff import Diff, FileChange
 from reviewer.instructions import InstructionFile
+from reviewer.llm_check import check_instructions_compliance
 from reviewer.rules import Rule
 
 pytestmark = pytest.mark.skipif(

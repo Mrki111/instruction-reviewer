@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LLM token observability. The report header gains an `LLM tokens:` line showing aggregated input/output/cache-create/cache-read counts and the prompt-cache hit rate. Same data is exposed structurally as a `kind: "diagnostic"` finding with `metadata.usage` in `--json-path` output.
 
 ### Changed
+- The default `fail-on` threshold is now `medium` for both the Action and CLI, so default LLM instruction-compliance findings can fail CI.
+- The composite Action now passes user inputs through environment variables before shell use, avoiding direct input interpolation inside the Bash script.
+- The README now explicitly documents the data sent to Anthropic when the LLM compliance check runs.
 - `Finding` gained `metadata: dict | None` and a `"diagnostic"` value for `kind`. Diagnostic findings are excluded from severity counts, the by-severity table, the findings listings, and the `fail-on` gate.
 - Repo-relative custom check files are now loaded from the PR base ref, not the PR head, so a PR cannot weaken its own custom check implementation.
 - GitHub annotations now skip diagnostic findings such as LLM token-usage records.

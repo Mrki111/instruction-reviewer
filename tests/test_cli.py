@@ -230,6 +230,57 @@ def test_main_loads_user_rules_from_base_ref_not_worktree(
     assert "SIZE_001" in report
 
 
+def test_main_defaults_to_medium_fail_threshold(
+    tmp_path: Path, monkeypatch
+) -> None:
+    default_rules = tmp_path / "rules.json"
+    default_rules.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "id": "SIZE_001",
+                        "enabled": True,
+                        "severity": "medium",
+                        "max_lines_changed": 1,
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setattr(
+        "reviewer.cli.build_pr_diff",
+        lambda base, head, repo: (
+            Diff(
+                base=base,
+                head=head,
+                merge_base=base,
+                files=[FileChange("foo.py", "M", 2, 0)],
+                raw="",
+            ),
+            [],
+        ),
+    )
+    monkeypatch.setattr("reviewer.cli._resolve_instructions_at_ref", lambda *args: [])
+
+    exit_code = main(
+        [
+            "--base-ref",
+            "base-sha",
+            "--head-ref",
+            "head-sha",
+            "--repo-root",
+            str(tmp_path),
+            "--default-rules",
+            str(default_rules),
+            "--report-path",
+            str(tmp_path / "report.md"),
+        ]
+    )
+
+    assert exit_code == 1
+
+
 def test_user_rules_auto_discovered(tmp_path: Path) -> None:
     rules_path = tmp_path / ".github" / "instruction-rules.json"
     rules_path.parent.mkdir()

@@ -6,13 +6,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from reviewer.checks import (
-    _COMPLIANCE_SYSTEM_PROMPT,
     CheckConfigurationError,
     Finding,
-    check_instructions_compliance,
     run_checks,
     severity_at_or_above,
     unimplemented_rule_ids,
+)
+from reviewer.llm_check import (
+    _COMPLIANCE_SYSTEM_PROMPT,
+    check_instructions_compliance,
 )
 from reviewer.diff import Commit, Diff, FileChange
 from reviewer.instructions import InstructionFile

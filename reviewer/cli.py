@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import hashlib
 import importlib
 import importlib.util
@@ -14,6 +13,7 @@ from pathlib import Path
 
 from reviewer.checks import (
     CheckConfigurationError,
+    _match_any,
     run_checks,
     severity_at_or_above,
     unimplemented_rule_ids,
@@ -89,7 +89,7 @@ def _load_instruction_files(
             continue
         if (
             _ignored_instruction_path(rel)
-            or not _matches_any_instruction_glob(rel, globs)
+            or not _match_any(globs, rel)
         ):
             continue
         seen.add(rel)
@@ -104,15 +104,6 @@ def _load_instruction_files(
             continue
         found.append(InstructionFile(path=rel, content=content))
     return found
-
-
-def _matches_any_instruction_glob(path: str, globs: list[str]) -> bool:
-    name = Path(path).name
-    return any(
-        fnmatch.fnmatch(path, glob)
-        or (glob.startswith("**/") and fnmatch.fnmatch(name, glob[3:]))
-        for glob in globs
-    )
 
 
 def _ignored_instruction_path(path: str) -> bool:
@@ -244,7 +235,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--fail-on",
         choices=["low", "medium", "high"],
-        default="high",
+        default="medium",
         help="Severity threshold that fails the run.",
     )
     p.add_argument("--repo-root", default=".", help="Repository root path.")

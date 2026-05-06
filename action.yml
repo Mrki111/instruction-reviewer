@@ -20,7 +20,7 @@ inputs:
   fail-on:
     description: Severity threshold that fails the job (low|medium|high).
     required: false
-    default: high
+    default: medium
   base-ref:
     description: Base ref to diff against. Defaults to the PR base SHA from the event.
     required: false
@@ -67,12 +67,21 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_INSTRUCTIONS: ${{ inputs.instructions }}
+        INPUT_RULES: ${{ inputs.rules }}
+        INPUT_CHECKS_MODULE: ${{ inputs.checks-module }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_COMMENT_ON_PR: ${{ inputs.comment-on-pr }}
+        EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        WORKSPACE_PATH: ${{ github.workspace }}
       run: |
-        BASE="${{ inputs.base-ref }}"
+        BASE="$INPUT_BASE_REF"
         if [ -z "$BASE" ]; then
-          BASE="${{ github.event.pull_request.base.sha }}"
+          BASE="$EVENT_BASE_SHA"
         fi
-        HEAD="${{ github.event.pull_request.head.sha || github.sha }}"
+        HEAD="$EVENT_HEAD_SHA"
         if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
           echo "::error::Could not resolve base/head refs. Provide base-ref explicitly or run on pull_request events." >&2
           exit 2
@@ -80,10 +89,10 @@ runs:
         python -m reviewer \
           --base-ref "$BASE" \
           --head-ref "$HEAD" \
-          --instructions "${{ inputs.instructions }}" \
-          --rules "${{ inputs.rules }}" \
-          --checks-module "${{ inputs.checks-module }}" \
-          --fail-on "${{ inputs.fail-on }}" \
-          --comment-on-pr "${{ inputs.comment-on-pr }}" \
-          --repo-root "${{ github.workspace }}" \
+          --instructions "$INPUT_INSTRUCTIONS" \
+          --rules "$INPUT_RULES" \
+          --checks-module "$INPUT_CHECKS_MODULE" \
+          --fail-on "$INPUT_FAIL_ON" \
+          --comment-on-pr "$INPUT_COMMENT_ON_PR" \
+          --repo-root "$WORKSPACE_PATH" \
           --github-output
