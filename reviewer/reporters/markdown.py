@@ -27,7 +27,7 @@ def render_report(
     lines.append(f"- Commits: {len(commits)}")
     visible_findings = [f for f in findings if f.kind == "violation"]
     lines.append(
-        f"- Findings: {len(visible_findings)} "
+        f"- Violations: {len(visible_findings)} "
         f"(fail-on threshold: `{threshold}`)"
     )
     llm_status = _llm_status_line(findings, rules, instructions)

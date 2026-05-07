@@ -119,7 +119,7 @@ def test_diagnostics_excluded_from_severity_table() -> None:
     report = render_report(
         [diag], _diff(), [], _instructions(), "high", rules=[_llm_rule()]
     )
-    assert "Findings: 0" in report
+    assert "Violations: 0" in report
     assert "| low | 0 |" in report  # no row inflation
     assert "## Findings" not in report  # no listings
 
@@ -141,4 +141,4 @@ def test_findings_count_excludes_skip_markers() -> None:
         rules=[_llm_rule()],
     )
     # Skip markers go to the LLM status line, not the headline count.
-    assert "Findings: 1" in report
+    assert "Violations: 1" in report
