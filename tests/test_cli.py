@@ -14,10 +14,19 @@ from reviewer.cli import (
     _resolve_user_rules,
     main,
 )
-from reviewer.checks import CHECKS, Finding
+from reviewer.checks import CHECKS, Finding, register
 from reviewer.diff import Diff, FileChange, GitError
 from reviewer.instructions import InstructionFile
 from reviewer.rules import Rule
+
+
+@register("TEST_FIRES_001")
+def _test_fires(rule, diff, commits, instructions):
+    threshold = int(rule.config.get("max_lines_changed", 1))
+    total = sum(f.additions + f.deletions for f in diff.files)
+    if total > threshold:
+        return [Finding(rule.id, rule.severity, f"test rule fired ({total} lines)")]
+    return []
 
 
 def test_default_instruction_discovery_is_recursive(tmp_path: Path) -> None:
@@ -172,7 +181,7 @@ def test_main_loads_user_rules_from_base_ref_not_worktree(
             {
                 "rules": [
                     {
-                        "id": "SIZE_001",
+                        "id": "TEST_FIRES_001",
                         "enabled": True,
                         "severity": "medium",
                         "max_lines_changed": 1000,
@@ -184,13 +193,13 @@ def test_main_loads_user_rules_from_base_ref_not_worktree(
     head_rules = tmp_path / ".github" / "instruction-rules.json"
     head_rules.parent.mkdir()
     head_rules.write_text(
-        json.dumps({"rules": [{"id": "SIZE_001", "enabled": False}]})
+        json.dumps({"rules": [{"id": "TEST_FIRES_001", "enabled": False}]})
     )
 
     def read_file_at_ref(repo_root, ref, path):
         assert ref == "base-sha"
         assert path == ".github/instruction-rules.json"
-        return json.dumps({"rules": [{"id": "SIZE_001", "max_lines_changed": 1}]})
+        return json.dumps({"rules": [{"id": "TEST_FIRES_001", "max_lines_changed": 1}]})
 
     monkeypatch.setattr("reviewer.cli.read_file_at_ref", read_file_at_ref)
     monkeypatch.setattr(
@@ -227,7 +236,7 @@ def test_main_loads_user_rules_from_base_ref_not_worktree(
 
     assert exit_code == 1
     report = (tmp_path / "report.md").read_text()
-    assert "SIZE_001" in report
+    assert "TEST_FIRES_001" in report
 
 
 def test_main_defaults_to_medium_fail_threshold(
@@ -239,7 +248,7 @@ def test_main_defaults_to_medium_fail_threshold(
             {
                 "rules": [
                     {
-                        "id": "SIZE_001",
+                        "id": "TEST_FIRES_001",
                         "enabled": True,
                         "severity": "medium",
                         "max_lines_changed": 1,

@@ -1,8 +1,8 @@
 # Instruction Reviewer
 
-A GitHub Action and Python CLI that checks whether PR changes follow the repository's Markdown guidelines, including `AGENTS.md`, `CLAUDE.md`, `REVIEW.md`, and team instruction files.
+A GitHub Action and Python CLI that checks whether PR changes follow the repository's Markdown guidelines. By default it reviews `AGENTS.md` and `CLAUDE.md`; other instruction files such as `REVIEW.md` or team-specific files can be included with the `instructions` input.
 
-Instruction Reviewer turns repo instruction files from passive guidance into an enforceable CI signal. It is built for teams using AI-assisted development who want to verify that generated or human-written changes actually followed the rules documented in the repo.
+Instruction Reviewer turns repo instruction files from passive guidance into an enforceable CI signal by sending them, the PR diff, and commit messages to Claude and reporting violations. It is built for teams using AI-assisted development who want to verify that generated or human-written changes actually followed the rules documented in the repo.
 
 Drop one workflow file into a repo and you get:
 
@@ -66,21 +66,15 @@ That's the default adoption path. `@v0` tracks the current pre-1.0 major release
 
 ## Bundled rules
 
-Rules ship in [`reviewer/default-rules.json`](reviewer/default-rules.json):
+The action ships one rule, defined in [`reviewer/default-rules.json`](reviewer/default-rules.json):
 
-| Id                          | Severity | What it checks                                                                                                |
-|-----------------------------|----------|---------------------------------------------------------------------------------------------------------------|
-| `TESTS_001`                 | medium   | Source files changed but no tests touched.                                                                    |
-| `INSTR_001`                 | low      | `AGENTS.md` / `CLAUDE.md` was modified in this PR.                                                            |
-| `COMMITS_001`               | low      | Commit subject exceeds 72 chars.                                                                              |
-| `COMMITS_002`               | medium   | Commit body is empty for non-trivial diffs (≥ 3 files).                                                       |
-| `SIZE_001`                  | medium   | PR exceeds 1 000 changed lines.                                                                               |
-| `SECRETS_001`               | high     | Diff contains text that looks like a secret.                                                                  |
-| `INSTRUCTIONS_COMPLIANCE_001` | medium | **LLM check.** Sends scoped instructions + scoped diff + commits to Claude Sonnet 4.6 and reports any violations it identifies. |
+| Id                            | Severity | What it checks                                                                                                                  |
+|-------------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------|
+| `INSTRUCTIONS_COMPLIANCE_001` | medium   | **LLM check.** Sends scoped instructions + scoped diff + commits to Claude Sonnet 4.6 and reports any violations it identifies. |
 
 ### `INSTRUCTIONS_COMPLIANCE_001` — the LLM compliance check
 
-This is the rule that actually verifies *"did the AI follow the rules in CLAUDE.md?"* — the others are hygiene heuristics. It does the following:
+This is the rule that verifies *"did the AI follow the rules in CLAUDE.md?"*. It does the following:
 
 1. Loads instruction files from the PR base SHA, not from the PR head. Repo-relative rule overrides are also loaded from the base SHA.
 2. Applies instruction files by directory scope. Root `AGENTS.md` / `CLAUDE.md` apply everywhere; nested files apply only to changed files under their directory.
@@ -144,13 +138,12 @@ The report header includes an `LLM tokens:` line summing input/output/cache-read
 
 ## Customizing rules
 
-Rules merge **by id**. To disable a default rule or tweak its config, drop this file into the consumer repo at `.github/instruction-rules.json`:
+Rules merge **by id**. To tweak the bundled rule's config or register a custom rule, drop this file into the consumer repo at `.github/instruction-rules.json`:
 
 ```json
 {
   "rules": [
-    { "id": "SIZE_001", "max_lines_changed": 2000 },
-    { "id": "TESTS_001", "enabled": false },
+    { "id": "INSTRUCTIONS_COMPLIANCE_001", "max_diff_chars": 400000, "fail_open": false },
     {
       "id": "TEAM_001",
       "enabled": true,
@@ -212,7 +205,7 @@ The default `pull_request` event does **not** expose secrets to PRs from forks, 
       ref: ${{ github.event.pull_request.head.sha }}
       fetch-depth: 0
   ```
-- Doing this means the workflow executes against a checkout from a fork PR with secret access. Treat the workflow file itself as the trust boundary: do not run untrusted scripts (test runners, build scripts, lint hooks the PR author can edit) in the same job. The reviewer disables `checks-module` on `pull_request_target` because custom checks are Python loaded from the checkout. The built-in checks and bundled rules still run.
+- Doing this means the workflow executes against a checkout from a fork PR with secret access. Treat the workflow file itself as the trust boundary: do not run untrusted scripts (test runners, build scripts, lint hooks the PR author can edit) in the same job. The reviewer disables `checks-module` on `pull_request_target` because custom checks are Python loaded from the checkout. The bundled LLM compliance rule still runs.
 
 ## Running locally
 
@@ -251,4 +244,4 @@ The CLI exits non-zero if any finding is at or above `--fail-on` (default `mediu
 ## Versioning
 
 - Pin to `@v0` while the project is pre-1.0. The `vX` major-version tag is updated automatically by the release workflow on every `vX.Y.Z` push.
-- Default rules are versioned with the action: a change to defaults is a major-version bump.
+- Default rules are versioned with the action. While the project is pre-1.0, breaking default-rule changes ship as minor releases and are documented in the changelog; after 1.0, they require a major-version bump.
