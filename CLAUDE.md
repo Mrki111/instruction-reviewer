@@ -2,7 +2,7 @@
 
 This repository is a GitHub Action + Python CLI whose load-bearing rule is `INSTRUCTIONS_COMPLIANCE_001`: it sends repo instruction files plus a PR diff to Claude and reports violations. The hygiene rules (`TESTS_001`, `INSTR_001`, `COMMITS_001/002`, `SIZE_001`, `SECRETS_001`) are baseline; prompt and trust-boundary work is the point of the project.
 
-When changing this codebase, follow the rules below. They are written so a reviewer can verify each one from the diff alone.
+When changing this codebase, follow the rules below. They are written so a reviewer — human or LLM — can verify each one from the unified diff alone, without running the code.
 
 ## Security and trust boundaries
 
@@ -34,6 +34,12 @@ When changing this codebase, follow the rules below. They are written so a revie
 - **Prefer prompt-quality work in `reviewer/llm_check.py` over adding more hygiene rules in `reviewer/checks.py`.** The project's value is the LLM compliance check; new generic linter heuristics dilute that.
 - **Any change to `reviewer/default-rules.json` is a breaking change** (rules merge by id; consumers inherit defaults). Bump the version and document it in `CHANGELOG.md` before merging.
 - **Public input/output names in `action.yml` MUST NOT be renamed without a major-version bump.** Consumers pin to `@v0`/`@v0.2.0` and call these by name.
+- **Any user-visible change to `action.yml`, `reviewer/default-rules.json`, or the public CLI flags in `reviewer/cli.py` MUST come with a `CHANGELOG.md` entry in the same PR.** Silent behavior changes break consumers who pin to a major-version tag.
+
+## Logging and diagnostics
+
+- **Do not add bare `print(...)` calls in `reviewer/cli.py` for user-facing notices or warnings.** Use `_emit_notice` / `_emit_warning`, which format `::notice::` / `::warning::` workflow commands correctly when running under GitHub Actions and fall back to stderr otherwise.
+- **Do not log instruction-file content, diff text, or commit messages anywhere outside the markdown/JSON report.** Those payloads may contain proprietary code or near-secrets; they belong in the report consumed by the PR author, not in workflow logs.
 
 ## Tests
 
