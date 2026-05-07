@@ -32,16 +32,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0   # full history for base..head diff
-      - uses: infinum/instruction-reviewer@v0.1.0
+      - uses: infinum/instruction-reviewer@v0
         with:
           fail-on: medium
           github-token: ${{ secrets.GITHUB_TOKEN }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}   # enables the LLM check
 ```
 
-That's the whole adoption story. Defaults are bundled, and `.github/instruction-rules.json` is picked up automatically when present.
+That's the default adoption path. `@v0` tracks the current pre-1.0 major release; pin an exact release tag or commit SHA if your organization requires stricter reproducibility. Defaults are bundled, and `.github/instruction-rules.json` is picked up automatically when present.
 
-> The `INSTRUCTIONS_COMPLIANCE_001` LLM check is enabled by default. When `anthropic-api-key` is missing it emits a low-severity skip finding by default instead of breaking every repo; set `fail_open: false` for strict repos that must fail when the LLM review cannot run.
+> The `anthropic-api-key` input is what makes the load-bearing `INSTRUCTIONS_COMPLIANCE_001` LLM check run. When it is missing, the rule emits a low-severity skip finding by default instead of breaking every repo; set `fail_open: false` for strict repos that must fail when the LLM review cannot run.
 > The default `fail-on: medium` means medium and high findings fail CI, including default LLM instruction-compliance violations.
 
 ## Inputs
@@ -196,7 +196,7 @@ Repo-relative custom check files are loaded from the PR base ref, not from the P
 
 ## Rollout guidance
 
-- Start with the default `fail-on: medium` when instruction compliance should block merges.
+- Start with the default `fail-on: medium` when `anthropic-api-key` is configured and instruction compliance should block merges.
 - Use `fail-on: high` during early rollout if you want only high-severity findings to fail builds.
 - Keep low findings visible in the PR report while teams tune false positives.
 - Watch the `LLM compliance:` line in the report header to confirm the load-bearing rule is actually running. `skipped — …` over multiple PRs in a row means a config/secret problem, not a clean run.
