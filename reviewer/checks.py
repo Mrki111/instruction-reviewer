@@ -68,12 +68,14 @@ def run_checks(
     instructions: list[InstructionFile],
 ) -> list[Finding]:
     findings: list[Finding] = []
+    # Loop through every rule and call its registered check function.
     for rule in rules:
         if not rule.enabled:
             continue
         fn = CHECKS.get(rule.id)
         if fn is None:
             continue
+        # Append the findings returned by this check to the running list.
         result = fn(rule, diff, commits, instructions) or []
         findings.extend(result)
     return findings

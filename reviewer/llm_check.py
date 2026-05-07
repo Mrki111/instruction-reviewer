@@ -7,6 +7,7 @@ so prompt-quality work does not collide with hygiene rule edits.
 """
 from __future__ import annotations
 
+import anthropic
 import html
 import json
 import os
