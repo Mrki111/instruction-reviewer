@@ -30,7 +30,7 @@ inputs:
     required: false
     default: "true"
   github-token:
-    description: Token for posting the sticky comment. Pass `${{ secrets.GITHUB_TOKEN }}`.
+    description: Token for posting the sticky comment. Pass `secrets.GITHUB_TOKEN` from your workflow.
     required: false
     default: ""
   anthropic-api-key:
