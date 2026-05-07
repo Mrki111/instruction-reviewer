@@ -1,5 +1,5 @@
 name: Instruction Reviewer
-description: Review PR diffs and commits against bundled/team rules and base-ref instruction files.
+description: Review PR diffs and commits against base-ref instruction files with an LLM compliance rule.
 branding:
   icon: check-square
   color: blue

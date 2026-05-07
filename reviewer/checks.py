@@ -157,15 +157,6 @@ def _parse_diff_git_header(line: str) -> tuple[str | None, str | None]:
     return old_path, new_path
 
 
-def _str_list_config(rule: Rule, key: str, default: list[str]) -> list[str]:
-    value = rule.config.get(key, default)
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise CheckConfigurationError(
-            f"{rule.id}.{key} must be a list of strings."
-        )
-    return value
-
-
 def _int_config(
     rule: Rule,
     key: str,
@@ -225,121 +216,9 @@ def _bool_config(value: Any, default: bool, *, rule_id: str, key: str) -> bool:
     raise CheckConfigurationError(f"{rule_id}.{key} must be a boolean.")
 
 
-# --- bundled checks --------------------------------------------------------
-
-
-@register("TESTS_001")
-def check_tests_reported(
-    rule: Rule, diff: Diff, commits: list[Commit], instructions: list[InstructionFile]
-) -> list[Finding]:
-    test_patterns = _str_list_config(rule, "test_patterns", [])
-    source_patterns = _str_list_config(rule, "source_patterns", [])
-
-    src_changed = [
-        f for f in diff.files
-        if _match_any(source_patterns, f.path) and not _match_any(test_patterns, f.path)
-    ]
-    test_changed = [f for f in diff.files if _match_any(test_patterns, f.path)]
-
-    if src_changed and not test_changed:
-        sample = ", ".join(f.path for f in src_changed[:3])
-        more = "" if len(src_changed) <= 3 else f", +{len(src_changed) - 3} more"
-        return [
-            Finding(
-                rule_id=rule.id,
-                severity=rule.severity,
-                message=(
-                    f"{len(src_changed)} source file(s) changed but no tests "
-                    f"were modified ({sample}{more})."
-                ),
-            )
-        ]
-    return []
-
-
-@register("INSTR_001")
-def check_instructions_modified(
-    rule: Rule, diff: Diff, commits: list[Commit], instructions: list[InstructionFile]
-) -> list[Finding]:
-    names = _str_list_config(
-        rule, "instruction_filenames", ["AGENTS.md", "CLAUDE.md"]
-    )
-    instr_files = [f for f in diff.files if PurePosixPath(f.path).name in names]
-    if not instr_files:
-        return []
-    return [
-        Finding(
-            rule_id=rule.id,
-            severity=rule.severity,
-            message=(
-                "Instruction file(s) modified — make sure the rest of the diff "
-                f"reflects the new guidance: {', '.join(f.path for f in instr_files)}"
-            ),
-            path=instr_files[0].path,
-        )
-    ]
-
-
-@register("COMMITS_001")
-def check_commit_subject_length(
-    rule: Rule, diff: Diff, commits: list[Commit], instructions: list[InstructionFile]
-) -> list[Finding]:
-    max_len = _int_config(rule, "max_subject_length", 72, min_value=1)
-    out: list[Finding] = []
-    for c in commits:
-        if len(c.subject) > max_len:
-            out.append(
-                Finding(
-                    rule_id=rule.id,
-                    severity=rule.severity,
-                    message=(
-                        f"Commit {c.sha[:7]} subject is {len(c.subject)} chars "
-                        f"(max {max_len}): {c.subject[:80]}"
-                    ),
-                )
-            )
-    return out
-
-
-@register("COMMITS_002")
-def check_commit_body(
-    rule: Rule, diff: Diff, commits: list[Commit], instructions: list[InstructionFile]
-) -> list[Finding]:
-    min_files = _int_config(rule, "min_files_for_body", 3, min_value=1)
-    out: list[Finding] = []
-    for c in commits:
-        if len(c.files) >= min_files and not c.body.strip():
-            out.append(
-                Finding(
-                    rule_id=rule.id,
-                    severity=rule.severity,
-                    message=(
-                        f"Commit {c.sha[:7]} touches {len(c.files)} files but has "
-                        "no message body explaining the change."
-                    ),
-                )
-            )
-    return out
-
-
-@register("SIZE_001")
-def check_pr_size(
-    rule: Rule, diff: Diff, commits: list[Commit], instructions: list[InstructionFile]
-) -> list[Finding]:
-    max_lines = _int_config(rule, "max_lines_changed", 1000, min_value=1)
-    total = sum(f.additions + f.deletions for f in diff.files)
-    if total > max_lines:
-        return [
-            Finding(
-                rule_id=rule.id,
-                severity=rule.severity,
-                message=(
-                    f"PR changes {total} lines across {len(diff.files)} file(s) "
-                    f"(threshold {max_lines}). Consider splitting it."
-                ),
-            )
-        ]
-    return []
+# --- secret-pattern helpers ------------------------------------------------
+# Used by INSTRUCTIONS_COMPLIANCE_001's pre-flight scan to refuse sending
+# credential-shaped text to Anthropic. Not registered as a standalone rule.
 
 
 SECRET_PATTERNS: list[SecretPattern] = [
@@ -460,16 +339,6 @@ def _secret_findings_for_commits(
                 )
                 break
     return findings
-
-
-@register("SECRETS_001")
-def check_secrets(
-    rule: Rule, diff: Diff, commits: list[Commit], instructions: list[InstructionFile]
-) -> list[Finding]:
-    return [
-        *_secret_findings_for_diff(rule.id, rule.severity, diff),
-        *_secret_findings_for_commits(rule.id, rule.severity, commits),
-    ]
 
 
 # Imported at the bottom for side effects: registers INSTRUCTIONS_COMPLIANCE_001

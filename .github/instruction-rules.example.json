@@ -1,6 +1,5 @@
 {
   "rules": [
-    { "id": "SIZE_001", "max_lines_changed": 1500 },
-    { "id": "COMMITS_001", "max_subject_length": 80 }
+    { "id": "INSTRUCTIONS_COMPLIANCE_001", "max_diff_chars": 400000, "fail_open": false }
   ]
 }

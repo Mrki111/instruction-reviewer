@@ -35,174 +35,41 @@ def make_diff(files: list[FileChange], raw: str = "") -> Diff:
     return Diff(base="b", head="h", merge_base="b", files=files, raw=raw)
 
 
-def test_tests_001_fires_when_only_source_changes() -> None:
-    rule = make_rule(
-        "TESTS_001",
-        test_patterns=["tests/**", "test_*.py"],
-        source_patterns=["*.py"],
+def test_disabled_rule_skipped(monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    rule = Rule(
+        id="INSTRUCTIONS_COMPLIANCE_001",
+        enabled=False,
+        severity="medium",
+        description="",
+        config={},
     )
-    diff = make_diff([FileChange("foo.py", "M", 5, 0)])
-    findings = run_checks([rule], diff, [], [])
-    assert len(findings) == 1
-    assert findings[0].rule_id == "TESTS_001"
+    instructions = [InstructionFile(path="AGENTS.md", content="- rule")]
+    diff = make_diff([FileChange("foo.py", "M", 1, 0)])
+    assert run_checks([rule], diff, [], instructions) == []
 
 
-def test_tests_001_silent_when_tests_change() -> None:
-    rule = make_rule(
-        "TESTS_001",
-        test_patterns=["tests/**", "test_*.py"],
-        source_patterns=["*.py"],
-    )
+def test_check_config_type_errors_are_configuration_errors(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "stub")
+    rule = make_rule("INSTRUCTIONS_COMPLIANCE_001", max_tokens="4096")
+    instructions = [InstructionFile(path="AGENTS.md", content="- rule")]
     diff = make_diff(
-        [FileChange("foo.py", "M", 5, 0), FileChange("tests/test_foo.py", "M", 1, 0)]
+        [FileChange("foo.py", "M", 1, 0)],
+        raw=(
+            "diff --git a/foo.py b/foo.py\n"
+            "--- a/foo.py\n"
+            "+++ b/foo.py\n"
+            "@@ -0,0 +1,1 @@\n"
+            "+x = 1\n"
+        ),
     )
-    assert run_checks([rule], diff, [], []) == []
-
-
-def test_tests_001_silent_when_only_tests_change() -> None:
-    rule = make_rule(
-        "TESTS_001",
-        test_patterns=["tests/**", "test_*.py"],
-        source_patterns=["*.py"],
-    )
-    diff = make_diff([FileChange("tests/test_foo.py", "M", 1, 0)])
-    assert run_checks([rule], diff, [], []) == []
-
-
-def test_instr_001_fires_on_agents_md() -> None:
-    rule = make_rule("INSTR_001", severity="low")
-    diff = make_diff([FileChange("AGENTS.md", "M", 5, 1)])
-    findings = run_checks([rule], diff, [], [])
-    assert len(findings) == 1
-    assert findings[0].path == "AGENTS.md"
-
-
-def test_commits_001_fires_on_long_subject() -> None:
-    rule = make_rule("COMMITS_001", max_subject_length=50)
-    long_subject = "x" * 80
-    commit = Commit(
-        sha="a" * 40,
-        author_name="t",
-        author_email="t@x",
-        subject=long_subject,
-        body="",
-        files=["a"],
-    )
-    diff = make_diff([])
-    findings = run_checks([rule], diff, [commit], [])
-    assert len(findings) == 1
-    assert findings[0].rule_id == "COMMITS_001"
-
-
-def test_commits_002_silent_for_small_commits_without_body() -> None:
-    rule = make_rule("COMMITS_002", min_files_for_body=3)
-    small_commit = Commit(
-        sha="b" * 40,
-        author_name="t",
-        author_email="t@x",
-        subject="tiny",
-        body="",
-        files=["a", "b"],  # under threshold
-    )
-    diff = make_diff([])
-    assert run_checks([rule], diff, [small_commit], []) == []
-
-
-def test_commits_002_fires_for_large_commit_without_body() -> None:
-    rule = make_rule("COMMITS_002", min_files_for_body=3)
-    big_commit = Commit(
-        sha="c" * 40,
-        author_name="t",
-        author_email="t@x",
-        subject="big",
-        body="",
-        files=["a", "b", "c", "d"],
-    )
-    diff = make_diff([])
-    assert len(run_checks([rule], diff, [big_commit], [])) == 1
-
-
-def test_size_001_fires_above_threshold() -> None:
-    rule = make_rule("SIZE_001", max_lines_changed=10)
-    diff = make_diff([FileChange("foo.py", "M", 30, 0)])
-    findings = run_checks([rule], diff, [], [])
-    assert len(findings) == 1
-
-
-def test_secrets_001_detects_aws_key() -> None:
-    rule = make_rule("SECRETS_001", severity="high")
-    raw_diff = """diff --git a/c.py b/c.py
-index 0000000..1111111 100644
---- a/c.py
-+++ b/c.py
-@@ -0,0 +1,1 @@
-+AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
-"""
-    diff = make_diff([FileChange("c.py", "A", 1, 0)], raw=raw_diff)
-    findings = run_checks([rule], diff, [], [])
-    aws = [f for f in findings if f.rule_id == "SECRETS_001"]
-    assert aws
-    assert aws[0].path == "c.py"
-    assert aws[0].line == 1
-
-
-def test_secrets_001_silent_on_clean_diff() -> None:
-    rule = make_rule("SECRETS_001", severity="high")
-    raw_diff = """diff --git a/c.py b/c.py
---- a/c.py
-+++ b/c.py
-@@ -1,1 +1,2 @@
- x = 1
-+y = 2
-"""
-    diff = make_diff([FileChange("c.py", "M", 1, 0)], raw=raw_diff)
-    assert run_checks([rule], diff, [], []) == []
-
-
-def test_secrets_001_ignores_obvious_placeholder_password() -> None:
-    rule = make_rule("SECRETS_001", severity="high")
-    raw_diff = """diff --git a/fixture.py b/fixture.py
---- a/fixture.py
-+++ b/fixture.py
-@@ -0,0 +1,1 @@
-+password = "fake_password_for_tests"
-"""
-    diff = make_diff([FileChange("fixture.py", "A", 1, 0)], raw=raw_diff)
-    assert run_checks([rule], diff, [], []) == []
-
-
-def test_secrets_001_detects_commit_message_secret() -> None:
-    rule = make_rule("SECRETS_001", severity="high")
-    commit = Commit(
-        sha="d" * 40,
-        author_name="t",
-        author_email="t@x",
-        subject="rotate token ghp_abcdefghijklmnopqrstuvwxyz123456",
-        body="",
-        files=["foo.py"],
-    )
-    findings = run_checks([rule], make_diff([]), [commit], [])
-    assert len(findings) == 1
-    assert findings[0].message.startswith("Possible GitHub personal access token")
-
-
-def test_disabled_rule_skipped() -> None:
-    rule = Rule(id="SIZE_001", enabled=False, severity="medium",
-                description="", config={"max_lines_changed": 1})
-    diff = make_diff([FileChange("foo.py", "M", 100, 0)])
-    assert run_checks([rule], diff, [], []) == []
-
-
-def test_check_config_type_errors_are_configuration_errors() -> None:
-    rule = make_rule("SIZE_001", max_lines_changed="1000")
-    diff = make_diff([FileChange("foo.py", "M", 100, 0)])
-    with pytest.raises(CheckConfigurationError, match="max_lines_changed"):
-        run_checks([rule], diff, [], [])
+    with pytest.raises(CheckConfigurationError, match="max_tokens"):
+        run_checks([rule], diff, [], instructions)
 
 
 def test_unimplemented_rule_ids_returns_enabled_unknown_rules() -> None:
     rules = [
-        make_rule("SIZE_001"),
+        make_rule("INSTRUCTIONS_COMPLIANCE_001"),
         make_rule("TEAM_001"),
         Rule(id="TEAM_002", enabled=False, severity="medium", description="", config={}),
     ]

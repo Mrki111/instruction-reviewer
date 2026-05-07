@@ -199,8 +199,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="instruction-reviewer",
         description=(
-            "Review a PR diff with bundled/team rules and AGENTS.md / CLAUDE.md "
-            "visibility."
+            "Review a PR diff against base-ref AGENTS.md / CLAUDE.md "
+            "instructions."
         ),
     )
     p.add_argument("--base-ref", required=True, help="Base ref or SHA to diff against.")

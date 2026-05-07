@@ -1,6 +1,6 @@
 # CLAUDE.md — instruction_reviewer
 
-This repository is a GitHub Action + Python CLI whose load-bearing rule is `INSTRUCTIONS_COMPLIANCE_001`: it sends repo instruction files plus a PR diff to Claude and reports violations. The hygiene rules (`TESTS_001`, `INSTR_001`, `COMMITS_001/002`, `SIZE_001`, `SECRETS_001`) are baseline; prompt and trust-boundary work is the point of the project.
+This repository is a GitHub Action + Python CLI whose only bundled rule is `INSTRUCTIONS_COMPLIANCE_001`: it sends repo instruction files plus a PR diff to Claude and reports violations. Prompt quality and trust-boundary work is the point of the project; do not re-introduce generic hygiene rules.
 
 When changing this codebase, follow the rules below. They are written so a reviewer can verify each one from the diff alone.
 
@@ -31,7 +31,7 @@ When changing this codebase, follow the rules below. They are written so a revie
 
 ## Scope of changes
 
-- **Prefer prompt-quality work in `reviewer/llm_check.py` over adding more hygiene rules in `reviewer/checks.py`.** The project's value is the LLM compliance check; new generic linter heuristics dilute that.
+- **Do not add generic hygiene checks (test coverage, commit length, PR size, secret scanning, etc.) to `reviewer/checks.py`.** They were removed deliberately to keep the project's scope on the LLM compliance check; reach for prompt-quality work in `reviewer/llm_check.py` instead.
 - **Any change to `reviewer/default-rules.json` is a breaking change** (rules merge by id; consumers inherit defaults). Bump the version and document it in `CHANGELOG.md` before merging.
 - **Public input/output names in `action.yml` MUST NOT be renamed without a major-version bump.** Consumers pin to `@v0`/`@v0.2.0` and call these by name.
 

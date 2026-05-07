@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-07
+
+### Removed
+- **Breaking:** the bundled hygiene rules `TESTS_001`, `INSTR_001`, `COMMITS_001`, `COMMITS_002`, `SIZE_001`, and `SECRETS_001` are gone. The action now ships only `INSTRUCTIONS_COMPLIANCE_001`. The pre-flight secret scan inside `INSTRUCTIONS_COMPLIANCE_001` is unchanged. Consumers who configured any of the removed rule ids in `.github/instruction-rules.json` should drop those entries — they will now be reported as unknown rules.
+
 ## [0.2.1] - 2026-05-07
 
 ### Fixed
