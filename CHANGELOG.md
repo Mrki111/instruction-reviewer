@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-05-07
+
+### Fixed
+- `action.yml` no longer references `${{ secrets.GITHUB_TOKEN }}` inside the `github-token` input description. The `secrets` context is not available in action manifests, which prevented the Action from loading at all on consumer repos pinned to `v0.2.0` / `v0`.
+
+### Changed
+- The markdown report header now reads `Violations: N` instead of `Findings: N`, so the headline count matches what is actually counted (only `kind == "violation"`). Skipped and diagnostic entries are still surfaced in the LLM status line and the by-severity table.
+
 ## [0.2.0] - 2026-05-06
 
 ### Added
