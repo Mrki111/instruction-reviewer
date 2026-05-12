@@ -232,12 +232,14 @@ def test_compliance_secret_scan_runs_before_api_key_check(monkeypatch) -> None:
 
 def test_compliance_does_not_call_llm_when_diff_contains_secret(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "stub")
-    raw_diff = """diff --git a/c.py b/c.py
---- a/c.py
-+++ b/c.py
-@@ -0,0 +1,1 @@
-+token = "ghp_abcdefghijklmnopqrstuvwxyz123456"
-"""
+    fake_pat = "ghp_" + "abcdefghijklmnopqrstuvwxyz123456"
+    raw_diff = (
+        "diff --git a/c.py b/c.py\n"
+        "--- a/c.py\n"
+        "+++ b/c.py\n"
+        "@@ -0,0 +1,1 @@\n"
+        f'+token = "{fake_pat}"\n'
+    )
     diff = Diff(
         base="b",
         head="h",
@@ -255,15 +257,48 @@ def test_compliance_does_not_call_llm_when_diff_contains_secret(monkeypatch) -> 
     assert "Skipping LLM" in findings[0].message
 
 
+def test_compliance_does_not_call_llm_when_removed_diff_line_contains_secret(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "stub")
+    fake_pat = "ghp_" + "abcdefghijklmnopqrstuvwxyz123456"
+    raw_diff = (
+        "diff --git a/c.py b/c.py\n"
+        "--- a/c.py\n"
+        "+++ b/c.py\n"
+        "@@ -1,1 +0,0 @@\n"
+        f'-token = "{fake_pat}"\n'
+    )
+    diff = Diff(
+        base="b",
+        head="h",
+        merge_base="b",
+        files=[FileChange("c.py", "M", 0, 1)],
+        raw=raw_diff,
+    )
+    with patch("anthropic.Anthropic") as anthropic_cls:
+        findings = check_instructions_compliance(
+            _compliance_rule(), diff, [], _instructions()
+        )
+    anthropic_cls.assert_not_called()
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert findings[0].kind == "skipped"
+    assert findings[0].path == "c.py"
+    assert findings[0].line is None
+    assert "Skipping LLM" in findings[0].message
+
+
 def test_compliance_does_not_call_llm_when_commit_message_contains_secret(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "stub")
+    fake_pat = "ghp_" + "abcdefghijklmnopqrstuvwxyz123456"
     commit = Commit(
         sha="e" * 40,
         author_name="t",
         author_email="t@x",
-        subject="rotate token ghp_abcdefghijklmnopqrstuvwxyz123456",
+        subject=f"rotate token {fake_pat}",
         body="",
         files=["foo.py"],
     )
@@ -759,6 +794,16 @@ def test_diagnostic_findings_do_not_count_toward_severity_gate() -> None:
     ]
     # The diagnostic is "low" but must not trip fail-on=low.
     assert severity_at_or_above(findings, "low") == 1
+    assert severity_at_or_above(findings, "high") == 1
+
+
+def test_skipped_findings_count_toward_gate_when_severity_reaches_threshold() -> None:
+    findings = [
+        Finding("R", "low", "default fail-open skip", kind="skipped"),
+        Finding("R", "high", "strict fail-open skip", kind="skipped"),
+    ]
+
+    assert severity_at_or_above(findings, "medium") == 1
     assert severity_at_or_above(findings, "high") == 1
 
 

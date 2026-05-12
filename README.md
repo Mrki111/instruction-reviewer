@@ -79,7 +79,7 @@ This is the rule that verifies *"did the AI follow the rules in CLAUDE.md?"*. It
 1. Loads instruction files from the PR base SHA, not from the PR head. Repo-relative rule overrides are also loaded from the base SHA.
 2. Applies instruction files by directory scope. Root `AGENTS.md` / `CLAUDE.md` apply everywhere; nested files apply only to changed files under their directory.
 3. Reviews each instruction scope separately, so nested rules are not applied to unrelated files.
-4. Refuses to call Anthropic when added diff lines or commit messages look like credentials, so suspected secrets are not sent to the provider.
+4. Refuses to call Anthropic when any outbound diff payload line or commit message looks like a credential, so suspected secrets are not sent to the provider.
 5. Sends the applicable instructions, scoped unified diff, and commit messages to `claude-sonnet-4-6` via the Anthropic API, with a system prompt that asks for *violations only* (not compliance, not unrelated rules).
 6. Receives a structured JSON list of findings (rule excerpt, severity, file/line) via `output_config.format` with a `json_schema`.
 7. Validates LLM-reported paths/lines against changed files in that scope before emitting annotations.
@@ -89,7 +89,7 @@ The instruction-files block is sent with `cache_control: ephemeral` so subsequen
 
 ### Data sent to Anthropic
 
-When `INSTRUCTIONS_COMPLIANCE_001` runs with `ANTHROPIC_API_KEY` set, it sends the applicable base-ref instruction files, scoped unified diff hunks, and commit messages to Anthropic. It does not send the full repository checkout. Before any LLM call, the reviewer scans added diff lines and commit messages for likely credentials; if a suspected secret is found, the LLM check is skipped for that run so the payload is not sent to Anthropic.
+When `INSTRUCTIONS_COMPLIANCE_001` runs with `ANTHROPIC_API_KEY` set, it sends the applicable base-ref instruction files, scoped unified diff hunks, and commit messages to Anthropic. It does not send the full repository checkout. Before any LLM call, the reviewer scans every outbound diff payload line and commit messages for likely credentials; if a suspected secret is found, the LLM check is skipped for that run so the payload is not sent to Anthropic.
 
 When `ANTHROPIC_API_KEY` is missing, applicable base-ref instruction files exist, and the rule is enabled, the default `fail_open: true` behavior emits a low-severity skip finding. To opt out entirely, disable the rule:
 
@@ -130,6 +130,8 @@ or:
 { "rules": [{ "id": "INSTRUCTIONS_COMPLIANCE_001", "fail_open_severity": "high" }] }
 ```
 
+Skipped findings still pass through the `fail-on` gate by severity. The default `fail_open_severity: low` keeps ordinary fail-open skips advisory when `fail-on: medium`; setting it to `high` intentionally blocks merges when the LLM check cannot safely run.
+
 The default `fail-on: medium` blocks default LLM instruction violations. Use `fail-on: high` only if you want instruction findings below high severity to remain advisory.
 
 **Cost order of magnitude:** with caching, a typical PR (≤ 50K-char diff, ~5K-token instructions) costs roughly a few cents per run on Sonnet 4.6 — first run in the cache window pays full input price; subsequent runs within ~5 minutes hit the cache.
@@ -140,8 +142,8 @@ The report header includes an `LLM tokens:` line summing input/output/cache-read
 
 Findings in the `--json-path` file include a `kind` field that JSON consumers should branch on:
 
-- `"violation"` — a real finding. Counts toward severity totals and the `fail-on` gate.
-- `"skipped"` — the rule could not run (fail-open: missing API key, oversize diff, possible secret in the payload, Anthropic error). Surfaced so the run is not silently empty; not counted toward `fail-on`.
+- `"violation"` — a real finding. Counts toward the `fail-on` gate by severity.
+- `"skipped"` — the rule could not run (fail-open: missing API key, oversize diff, possible secret in the payload, Anthropic error). Surfaced so the run is not silently empty; counts toward the `fail-on` gate by severity, which lets strict repos use `fail_open_severity: high`.
 - `"diagnostic"` — observability records such as LLM token usage. Filtered out of severity counts, the by-severity table, and the `fail-on` gate.
 
 Filter on `kind == "violation"` if you only want real findings.
