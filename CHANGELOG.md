@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-05-12
+
+### Fixed
+- The LLM pre-flight secret scan now checks every line of the outbound diff payload, including removed and context lines, before sending anything to Anthropic. Previously only added lines were scanned, so removing an existing credential-shaped line could still send that removed line in the diff payload.
+- README now matches the implemented fail gate for skipped findings: skipped findings count by severity, which keeps the default low fail-open skips advisory while allowing `fail_open_severity: high` to block strict repos.
+- Package metadata is bumped to `0.4.1` so the next release tag can move consumers off the stale `v0.4.0` tag state, and the release workflow now fails if a pushed `vX.Y.Z` tag does not match `pyproject.toml`.
+
 ## [0.4.0] - 2026-05-12
 
 ### Changed

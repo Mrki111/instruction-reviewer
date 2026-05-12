@@ -342,6 +342,77 @@ def _secret_findings_for_diff(rule_id: str, severity: str, diff: Diff) -> list[F
     return findings
 
 
+def _iter_diff_payload_lines(
+    raw_diff: str,
+) -> Iterable[tuple[str | None, int | None, str]]:
+    """Yield text lines that would be sent in the raw diff payload.
+
+    Added and context lines can be mapped to new-side line numbers. Removed
+    lines are still part of the outbound payload, but GitHub annotations cannot
+    target old-side-only lines reliably, so their line number is reported as
+    ``None``.
+    """
+    current_path: str | None = None
+    new_line_no = 0
+    for line in raw_diff.splitlines():
+        old_path, new_path = _parse_diff_git_header(line)
+        if old_path is not None or new_path is not None:
+            current_path = new_path or old_path
+            yield current_path, None, line
+            continue
+
+        parsed_new_path = _parse_diff_path_line(line, "+++", "b/")
+        if parsed_new_path is not None:
+            current_path = parsed_new_path
+            yield current_path, None, line
+            continue
+        parsed_old_path = _parse_diff_path_line(line, "---", "a/")
+        if parsed_old_path is not None:
+            current_path = current_path or parsed_old_path
+            yield current_path, None, line
+            continue
+
+        if line.startswith("+++ ") or line.startswith("--- "):
+            yield current_path, None, line
+            continue
+
+        hunk = re.match(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
+        if hunk:
+            new_line_no = int(hunk.group(2)) - 1
+            yield current_path, None, line
+            continue
+
+        if line.startswith("+") and not line.startswith("+++"):
+            new_line_no += 1
+            yield current_path, new_line_no, line[1:]
+        elif line.startswith("-") and not line.startswith("---"):
+            yield current_path, None, line[1:]
+        elif line.startswith(" "):
+            new_line_no += 1
+            yield current_path, new_line_no, line[1:]
+        else:
+            yield current_path, None, line
+
+
+def _secret_findings_for_diff_payload(
+    rule_id: str, severity: str, diff: Diff
+) -> list[Finding]:
+    findings: list[Finding] = []
+    for path, lineno, content in _iter_diff_payload_lines(diff.raw):
+        secret_label = _secret_label_for_text(content)
+        if secret_label:
+            findings.append(
+                Finding(
+                    rule_id=rule_id,
+                    severity=severity,
+                    message=f"Possible {secret_label} appears in the diff payload.",
+                    path=path,
+                    line=lineno,
+                )
+            )
+    return findings
+
+
 def _secret_findings_for_commits(
     rule_id: str, severity: str, commits: list[Commit]
 ) -> list[Finding]:

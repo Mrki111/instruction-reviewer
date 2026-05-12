@@ -23,7 +23,7 @@ from reviewer.checks import (
     _parse_diff_git_header,
     _parse_diff_path_line,
     _secret_findings_for_commits,
-    _secret_findings_for_diff,
+    _secret_findings_for_diff_payload,
     _severity_config,
     _iter_added_lines,
     register,
@@ -310,7 +310,7 @@ def check_instructions_compliance(
         return []
 
     possible_secrets = [
-        *_secret_findings_for_diff(rule.id, "high", diff),
+        *_secret_findings_for_diff_payload(rule.id, "high", diff),
         *_secret_findings_for_commits(rule.id, "high", commits),
     ]
     if possible_secrets:
