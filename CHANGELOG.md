@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-12
+
+### Changed
+- The placeholder-secret bypass in `INSTRUCTIONS_COMPLIANCE_001`'s pre-flight scan now applies uniformly to provider-shaped patterns (`ghp_`, `gho_`, `ghs_`, `AKIA`). Previously only the generic credential pattern bypassed; provider patterns always tripped, which broke realistic test fixtures. A token whose random tail contains `fake`, `test`, `fixture`, etc. now bypasses for every pattern. Real opaque tokens still trip.
+- LLM JSON-parse errors no longer include any of the model's response text in the finding message. Errors now surface as `response was not valid JSON (<msg> at char N)`. Closes a path where a malformed response could carry diff bytes into the sticky comment, step summary, or `--json-path` output.
+- Commit subjects are HTML-escaped in the markdown report's commits block so a crafted `</details>` or stray tag in a commit subject cannot mangle the sticky comment.
+
+### Fixed
+- `action.yml` `rules` input description now states that repo-relative paths are read from `base-ref`.
+- README clarified: matching ids merge over bundled defaults; unknown ids do not inherit (they use dataclass defaults `enabled: true`, `severity: medium`).
+- Architecture map in README now points to `reviewer/llm_check.py` (the only registered rule) rather than `reviewer/checks.py`.
+
+### Internal
+- Dead head-ref helpers (`_resolve_instructions`, `_resolve_user_rules`) removed from `reviewer/cli.py`.
+- All GitHub Actions pinned to commit SHAs across `action.yml` and workflows.
+- Test workflow now triggers on push to `master` (was `main`); post-merge CI now runs.
+- New trust-boundary tests: `..` traversal rejection in `_read_user_rules_from_base`, absolute-paths-outside-repo escape hatch, `--json-path` end-to-end output shape, severity-override pinning, commit-subject escape regression test, secret-scan-before-API-key-check ordering.
+- Smoke test additionally asserts the token-usage diagnostic is present so SDK drift on `response.usage` is caught.
+- `self-review.yml` removed — daily smoke covers SDK contract drift and the dogfood demo wasn't load-bearing.
+
 ## [0.3.0] - 2026-05-07
 
 ### Removed
