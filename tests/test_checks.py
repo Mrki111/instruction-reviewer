@@ -196,6 +196,36 @@ def test_compliance_oversize_diff_returns_low_finding(monkeypatch) -> None:
     assert "1000" in findings[0].message
 
 
+def test_compliance_secret_scan_runs_before_api_key_check(monkeypatch) -> None:
+    # Pin the trust-boundary ordering: a credential-shaped diff line must
+    # short-circuit the rule with a high-severity skip even when the user
+    # has not configured ANTHROPIC_API_KEY. If the API-key check ran first
+    # this would be a low-severity fail-open finding instead.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    raw_diff = """diff --git a/c.py b/c.py
+--- a/c.py
++++ b/c.py
+@@ -0,0 +1,1 @@
++token = "ghp_abcdefghijklmnopqrstuvwxyz123456"
+"""
+    diff = Diff(
+        base="b",
+        head="h",
+        merge_base="b",
+        files=[FileChange("c.py", "A", 1, 0)],
+        raw=raw_diff,
+    )
+    with patch("anthropic.Anthropic") as anthropic_cls:
+        findings = check_instructions_compliance(
+            _compliance_rule(), diff, [], _instructions()
+        )
+    anthropic_cls.assert_not_called()
+    assert len(findings) == 1
+    assert findings[0].severity == "high"
+    assert findings[0].kind == "skipped"
+    assert "Skipping LLM" in findings[0].message
+
+
 def test_compliance_does_not_call_llm_when_diff_contains_secret(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "stub")
     raw_diff = """diff --git a/c.py b/c.py

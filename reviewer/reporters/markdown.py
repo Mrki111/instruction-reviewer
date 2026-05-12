@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from reviewer.checks import Finding
 from reviewer.diff import Commit, Diff
 from reviewer.instructions import InstructionFile
@@ -80,7 +82,10 @@ def render_report(
         lines.append("<details><summary>Commits in this diff</summary>")
         lines.append("")
         for c in commits:
-            lines.append(f"- `{c.sha[:7]}` {c.subject}")
+            # Subjects are PR-author-controlled and embedded inside a <details>
+            # block — HTML-escape so a crafted </details> or stray tag can't
+            # break out and mangle the rendered comment.
+            lines.append(f"- `{c.sha[:7]}` {html.escape(c.subject, quote=False)}")
         lines.append("")
         lines.append("</details>")
         lines.append("")

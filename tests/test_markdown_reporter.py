@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from reviewer.checks import Finding
-from reviewer.diff import Diff
+from reviewer.diff import Commit, Diff
 from reviewer.instructions import InstructionFile
 from reviewer.reporters.markdown import render_report
 from reviewer.rules import Rule
@@ -122,6 +122,22 @@ def test_diagnostics_excluded_from_severity_table() -> None:
     assert "Violations: 0" in report
     assert "| low | 0 |" in report  # no row inflation
     assert "## Findings" not in report  # no listings
+
+
+def test_commit_subject_is_html_escaped_in_report() -> None:
+    commit = Commit(
+        sha="a" * 40,
+        author_name="t",
+        author_email="t@x",
+        subject="oops </details><script>alert(1)</script>",
+        body="",
+        files=[],
+    )
+    report = render_report(
+        [], _diff(), [commit], _instructions(), "high", rules=[_llm_rule()]
+    )
+    assert "</details><script>" not in report
+    assert "&lt;/details&gt;&lt;script&gt;" in report
 
 
 def test_findings_count_excludes_skip_markers() -> None:

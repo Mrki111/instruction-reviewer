@@ -278,7 +278,9 @@ def _iter_added_lines(raw_diff: str) -> Iterable[tuple[str | None, int, str]]:
 
     ``path`` is ``None`` for ``+`` lines that appear before any ``+++`` header
     (only relevant for malformed diffs); ``content`` excludes the leading ``+``.
-    Headers and ``-`` lines do not advance the new-side counter.
+    Headers and ``-`` lines do not advance the new-side counter. ``\\ No newline
+    at end of file`` markers start with ``\\`` and fall through every branch by
+    design — they are not added content and do not move the counter.
     """
     current_path: str | None = None
     new_line_no = 0
