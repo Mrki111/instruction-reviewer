@@ -221,15 +221,36 @@ def _bool_config(value: Any, default: bool, *, rule_id: str, key: str) -> bool:
 # credential-shaped text to Anthropic. Not registered as a standalone rule.
 
 
+# Provider patterns capture their random tail as `value` so the placeholder
+# bypass below applies uniformly. A real PAT / access key is opaque random
+# alphanumerics; the chance of one happening to contain "test", "fake", etc.
+# as a substring is in the low-ppm range. The private-key block has no
+# random tail to inspect, so it never bypasses.
 SECRET_PATTERNS: list[SecretPattern] = [
-    SecretPattern(re.compile(r"AKIA[0-9A-Z]{16}"), "AWS access key id"),
+    SecretPattern(
+        re.compile(r"AKIA(?P<value>[0-9A-Z]{16})"),
+        "AWS access key id",
+        value_group="value",
+    ),
     SecretPattern(
         re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
         "Private key block",
     ),
-    SecretPattern(re.compile(r"ghp_[A-Za-z0-9]{30,}"), "GitHub personal access token"),
-    SecretPattern(re.compile(r"gho_[A-Za-z0-9]{30,}"), "GitHub OAuth token"),
-    SecretPattern(re.compile(r"ghs_[A-Za-z0-9]{30,}"), "GitHub server-to-server token"),
+    SecretPattern(
+        re.compile(r"ghp_(?P<value>[A-Za-z0-9]{30,})"),
+        "GitHub personal access token",
+        value_group="value",
+    ),
+    SecretPattern(
+        re.compile(r"gho_(?P<value>[A-Za-z0-9]{30,})"),
+        "GitHub OAuth token",
+        value_group="value",
+    ),
+    SecretPattern(
+        re.compile(r"ghs_(?P<value>[A-Za-z0-9]{30,})"),
+        "GitHub server-to-server token",
+        value_group="value",
+    ),
     SecretPattern(
         re.compile(
             r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*['\"](?P<value>[^'\"\s]{16,})['\"]"

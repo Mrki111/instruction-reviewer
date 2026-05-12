@@ -277,6 +277,36 @@ def test_compliance_does_not_call_llm_when_commit_message_contains_secret(
     assert "commit message" in findings[0].message
 
 
+def test_compliance_calls_llm_for_placeholder_github_token_fixture(monkeypatch) -> None:
+    # Provider-shaped patterns (ghp_, AKIA, ...) used to bypass the placeholder
+    # check unconditionally, so credential-shape test fixtures tripped the
+    # pre-flight scan even when the random tail spelled out "fake" / "test".
+    # With value-group capture they now bypass like the generic pattern does.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "stub")
+    fake_client = _mock_anthropic_response({"findings": []})
+    fake_pat = "ghp_" + "fakeFAKEfakeFAKEfakeFAKEfakeFA"  # 30 chars after prefix
+    raw_diff = (
+        "diff --git a/fixture.py b/fixture.py\n"
+        "--- a/fixture.py\n"
+        "+++ b/fixture.py\n"
+        "@@ -0,0 +1,1 @@\n"
+        f'+token = "{fake_pat}"\n'
+    )
+    diff = Diff(
+        base="b",
+        head="h",
+        merge_base="b",
+        files=[FileChange("fixture.py", "A", 1, 0)],
+        raw=raw_diff,
+    )
+    with patch("anthropic.Anthropic", return_value=fake_client):
+        findings = check_instructions_compliance(
+            _compliance_rule(), diff, [], _instructions()
+        )
+    assert findings == []
+    assert fake_client.messages.create.call_count == 1
+
+
 def test_compliance_calls_llm_for_placeholder_password_fixture(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "stub")
     fake_client = _mock_anthropic_response({"findings": []})
