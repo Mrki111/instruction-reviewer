@@ -202,12 +202,16 @@ def test_compliance_secret_scan_runs_before_api_key_check(monkeypatch) -> None:
     # has not configured ANTHROPIC_API_KEY. If the API-key check ran first
     # this would be a low-severity fail-open finding instead.
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    raw_diff = """diff --git a/c.py b/c.py
---- a/c.py
-+++ b/c.py
-@@ -0,0 +1,1 @@
-+token = "ghp_abcdefghijklmnopqrstuvwxyz123456"
-"""
+    # Build the token at runtime so this source line does not itself match
+    # the GitHub-PAT regex when the action self-reviews this repo.
+    fake_pat = "ghp_" + "abcdefghijklmnopqrstuvwxyz123456"
+    raw_diff = (
+        "diff --git a/c.py b/c.py\n"
+        "--- a/c.py\n"
+        "+++ b/c.py\n"
+        "@@ -0,0 +1,1 @@\n"
+        f'+token = "{fake_pat}"\n'
+    )
     diff = Diff(
         base="b",
         head="h",
