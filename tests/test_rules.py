@@ -42,6 +42,22 @@ def test_user_overrides_by_id_and_appends_new(tmp_path: Path) -> None:
     assert by_id["Z"].severity == "medium"
 
 
+def test_user_severity_overrides_default(tmp_path: Path) -> None:
+    # The rule's severity acts as the ceiling for LLM findings, so a user
+    # raising it from low to high must take effect — otherwise the
+    # configured strictness is silently ignored.
+    default = tmp_path / "d.json"
+    user = tmp_path / "u.json"
+    _write(default, [{"id": "X", "severity": "low", "description": "default-x"}])
+    _write(user, [{"id": "X", "severity": "high"}])
+
+    rules = load_rules(default, user)
+
+    assert len(rules) == 1
+    assert rules[0].severity == "high"
+    assert rules[0].description == "default-x"
+
+
 def test_user_can_replace_config_field(tmp_path: Path) -> None:
     default = tmp_path / "d.json"
     user = tmp_path / "u.json"

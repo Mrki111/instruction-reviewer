@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2026-05-07
 
 ### Removed
-- **Breaking:** the bundled hygiene rules `TESTS_001`, `INSTR_001`, `COMMITS_001`, `COMMITS_002`, `SIZE_001`, and `SECRETS_001` are gone. The action now ships only `INSTRUCTIONS_COMPLIANCE_001`. The pre-flight secret scan inside `INSTRUCTIONS_COMPLIANCE_001` is unchanged. Consumers who configured any of the removed rule ids in `.github/instruction-rules.json` should drop those entries — they will now be reported as unknown rules.
+- **Breaking:** the bundled hygiene rules `TESTS_001`, `INSTR_001`, `COMMITS_001`, `COMMITS_002`, `SIZE_001`, and `SECRETS_001` are gone. The action now ships only `INSTRUCTIONS_COMPLIANCE_001`. The pre-flight secret scan inside `INSTRUCTIONS_COMPLIANCE_001` is unchanged.
+
+### Migration
+- Drop any of the removed rule ids from `.github/instruction-rules.json`. They no longer have implementations and the CLI will surface them as `::warning::` lines about unknown rule ids.
+- To keep an existing entry around as a placeholder (e.g. while you migrate other repos), set `"enabled": false` — disabled unknown ids do not warn.
+- `default-rules.json` now contains a single entry, so user overrides merge against a much smaller surface. Behavioral defaults for `INSTRUCTIONS_COMPLIANCE_001` (`severity: medium`, `fail_open: true`, `fail_open_severity: low`, model `claude-sonnet-4-6`) are unchanged from 0.2.x.
 
 ## [0.2.1] - 2026-05-07
 

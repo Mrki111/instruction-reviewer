@@ -10,7 +10,11 @@ inputs:
     required: false
     default: ""
   rules:
-    description: Path to a user rules JSON. Defaults to .github/instruction-rules.json when present.
+    description: |
+      Path to a user rules JSON. Defaults to .github/instruction-rules.json when present.
+      Repo-relative paths are read from `base-ref` (not the PR head) so a PR cannot relax
+      its own configured rules. Absolute paths outside the repo are read from the runner
+      filesystem as a CLI escape hatch.
     required: false
     default: ""
   checks-module:
@@ -53,7 +57,7 @@ runs:
   using: composite
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version: "3.11"
 

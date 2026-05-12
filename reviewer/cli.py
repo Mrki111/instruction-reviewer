@@ -54,53 +54,25 @@ def _split_globs(value: str) -> list[str]:
     return [g.strip() for g in re.split(r"[,\n]+", value or "") if g.strip()]
 
 
-def _resolve_instructions(repo_root: Path, raw: str) -> list[InstructionFile]:
-    globs = _split_globs(raw) or [f"**/{name}" for name in DEFAULT_INSTRUCTION_GLOBS]
-    paths = [
-        match.relative_to(repo_root).as_posix()
-        for glob in globs
-        for match in repo_root.glob(glob)
-        if match.is_file()
-    ]
-    return _load_instruction_files(repo_root, None, paths, raw)
-
-
 def _resolve_instructions_at_ref(
     repo_root: Path, ref: str, raw: str
 ) -> list[InstructionFile]:
     try:
-        paths = list_files_at_ref(repo_root, ref)
+        candidate_paths = list_files_at_ref(repo_root, ref)
     except GitError as e:
         raise GitError(f"Could not list instruction files at {ref}: {e}") from e
-    return _load_instruction_files(repo_root, ref, paths, raw)
-
-
-def _load_instruction_files(
-    repo_root: Path,
-    ref: str | None,
-    candidate_paths: list[str],
-    raw: str,
-) -> list[InstructionFile]:
     globs = _split_globs(raw) or [f"**/{name}" for name in DEFAULT_INSTRUCTION_GLOBS]
     found: list[InstructionFile] = []
     seen: set[str] = set()
     for rel in candidate_paths:
         if rel in seen:
             continue
-        if (
-            _ignored_instruction_path(rel)
-            or not _match_any(globs, rel)
-        ):
+        if _ignored_instruction_path(rel) or not _match_any(globs, rel):
             continue
         seen.add(rel)
         try:
-            if ref is None:
-                content = (repo_root / rel).read_text(
-                    encoding="utf-8", errors="replace"
-                )
-            else:
-                content = read_file_at_ref(repo_root, ref, rel)
-        except (OSError, GitError):
+            content = read_file_at_ref(repo_root, ref, rel)
+        except GitError:
             continue
         found.append(InstructionFile(path=rel, content=content))
     return found
@@ -108,14 +80,6 @@ def _load_instruction_files(
 
 def _ignored_instruction_path(path: str) -> bool:
     return any(part in IGNORED_INSTRUCTION_DIRS for part in Path(path).parts)
-
-
-def _resolve_user_rules(repo_root: Path, raw: str) -> Path | None:
-    if raw:
-        path = Path(raw)
-        return path if path.is_absolute() else repo_root / path
-    auto_path = repo_root / AUTO_RULES_PATH
-    return auto_path if auto_path.exists() else None
 
 
 def _repo_relative_path(raw: str, label: str) -> str:
@@ -473,6 +437,12 @@ def _load_check_extension_module(
         importlib.import_module(module_name)
         return
 
+    # Trust boundary: filter sys.path entries inside repo_root so we cannot
+    # accidentally import a sibling module from the PR head checkout. This
+    # does NOT cover packages already installed into site-packages — those
+    # were chosen by a trusted workflow step (e.g. `pip install`), not by
+    # the PR. The `pull_request_target` guard in main() blocks --checks-module
+    # outright, which is the load-bearing defense for fork PRs.
     old_path = list(sys.path)
     sys.path = [
         entry

@@ -122,7 +122,7 @@ def _format_commits_block(commits: list[Commit]) -> str:
     parts: list[str] = []
     for c in commits:
         body = c.body.strip()
-        block = f"- {c.sha[:7]} {_escape_prompt_text(c.subject)}"
+        block = f"- {_escape_prompt_text(c.sha[:7])} {_escape_prompt_text(c.subject)}"
         if body:
             indented = "\n".join(
                 f"  {_escape_prompt_text(line)}" for line in body.splitlines()
@@ -503,8 +503,11 @@ def _run_instruction_compliance_request(
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
+        # Do not echo the response body here: it becomes a finding message
+        # that lands in the sticky PR comment, step summary, and JSON output,
+        # and a malformed response could carry arbitrary diff bytes back.
         raise _LLMScopeFailure(
-            f"{rule.id}: response was not valid JSON: {e}. Body: {text[:500]}"
+            f"{rule.id}: response was not valid JSON ({e.msg} at char {e.pos})."
         ) from e
 
     return _findings_from_llm_payload(rule, diff, data)

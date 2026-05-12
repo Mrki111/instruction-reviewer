@@ -9,9 +9,7 @@ from reviewer.cli import (
     _emit_warning,
     _load_check_extensions,
     _read_user_rules_from_base,
-    _resolve_instructions,
     _resolve_instructions_at_ref,
-    _resolve_user_rules,
     main,
 )
 from reviewer.checks import CHECKS, Finding, register
@@ -27,26 +25,6 @@ def _test_fires(rule, diff, commits, instructions):
     if total > threshold:
         return [Finding(rule.id, rule.severity, f"test rule fired ({total} lines)")]
     return []
-
-
-def test_default_instruction_discovery_is_recursive(tmp_path: Path) -> None:
-    (tmp_path / "AGENTS.md").write_text("root\n")
-    nested = tmp_path / "packages" / "api" / "AGENTS.md"
-    nested.parent.mkdir(parents=True)
-    nested.write_text("nested\n")
-
-    found = _resolve_instructions(tmp_path, "")
-    assert [f.path for f in found] == ["AGENTS.md", "packages/api/AGENTS.md"]
-    assert found[0].content == "root\n"
-    assert found[1].content == "nested\n"
-
-
-def test_instruction_discovery_ignores_generated_dirs(tmp_path: Path) -> None:
-    ignored = tmp_path / "node_modules" / "pkg" / "AGENTS.md"
-    ignored.parent.mkdir(parents=True)
-    ignored.write_text("ignored\n")
-
-    assert _resolve_instructions(tmp_path, "") == []
 
 
 def test_instruction_loading_uses_requested_git_ref(
@@ -67,6 +45,21 @@ def test_instruction_loading_uses_requested_git_ref(
     assert [f.path for f in found] == ["AGENTS.md", "packages/api/AGENTS.md"]
     assert found[0].content == "base rules\n"
     assert found[1].content == "api base rules\n"
+
+
+def test_instruction_loading_ignores_generated_dirs(
+    repo: Path, commit: Callable
+) -> None:
+    base = commit(
+        {
+            "AGENTS.md": "real\n",
+            "node_modules/pkg/AGENTS.md": "ignored\n",
+        },
+        "base",
+    )
+
+    found = _resolve_instructions_at_ref(repo, base, "")
+    assert [f.path for f in found] == ["AGENTS.md"]
 
 
 def test_main_reports_low_finding_when_llm_rule_enabled_without_key(
@@ -290,20 +283,6 @@ def test_main_defaults_to_medium_fail_threshold(
     assert exit_code == 1
 
 
-def test_user_rules_auto_discovered(tmp_path: Path) -> None:
-    rules_path = tmp_path / ".github" / "instruction-rules.json"
-    rules_path.parent.mkdir()
-    rules_path.write_text(json.dumps({"rules": []}))
-
-    assert _resolve_user_rules(tmp_path, "") == rules_path
-
-
-def test_explicit_user_rules_are_repo_relative(tmp_path: Path) -> None:
-    assert _resolve_user_rules(tmp_path, "config/rules.json") == (
-        tmp_path / "config" / "rules.json"
-    )
-
-
 def test_in_repo_absolute_rules_path_is_loaded_from_base(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -321,6 +300,39 @@ def test_in_repo_absolute_rules_path_is_loaded_from_base(
 
     assert text == '{"rules": []}'
     assert label == "base-sha:.github/instruction-rules.json"
+
+
+def test_read_user_rules_rejects_parent_traversal(tmp_path: Path) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="inside the repository"):
+        _read_user_rules_from_base(tmp_path, "base-sha", "../../etc/passwd")
+
+
+def test_read_user_rules_rejects_embedded_parent_traversal(tmp_path: Path) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="inside the repository"):
+        _read_user_rules_from_base(tmp_path, "base-sha", "config/../../escape.json")
+
+
+def test_absolute_rules_path_outside_repo_reads_from_filesystem(
+    tmp_path: Path, monkeypatch
+) -> None:
+    outside = tmp_path / "outside-rules.json"
+    outside.write_text('{"rules": []}')
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("read_file_at_ref must not be called for paths outside the repo")
+
+    monkeypatch.setattr("reviewer.cli.read_file_at_ref", fail_if_called)
+
+    text, label = _read_user_rules_from_base(repo_root, "base-sha", str(outside))
+
+    assert text == '{"rules": []}'
+    assert label == str(outside)
 
 
 def test_load_check_extension_from_file(tmp_path: Path) -> None:
@@ -418,6 +430,69 @@ def test_main_rejects_checks_module_on_pull_request_target(
 
     assert exit_code == 2
     assert "--checks-module is disabled on pull_request_target" in capsys.readouterr().err
+
+
+def test_main_writes_full_json_report(tmp_path: Path, monkeypatch) -> None:
+    default_rules = tmp_path / "rules.json"
+    default_rules.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "id": "TEST_FIRES_001",
+                        "enabled": True,
+                        "severity": "medium",
+                        "max_lines_changed": 1,
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setattr(
+        "reviewer.cli.build_pr_diff",
+        lambda base, head, repo: (
+            Diff(
+                base=base,
+                head=head,
+                merge_base=base,
+                files=[FileChange("foo.py", "M", 2, 0)],
+                raw="",
+            ),
+            [],
+        ),
+    )
+    monkeypatch.setattr("reviewer.cli._resolve_instructions_at_ref", lambda *args: [])
+
+    json_path = tmp_path / "report.json"
+    exit_code = main(
+        [
+            "--base-ref",
+            "base-sha",
+            "--head-ref",
+            "head-sha",
+            "--repo-root",
+            str(tmp_path),
+            "--default-rules",
+            str(default_rules),
+            "--report-path",
+            str(tmp_path / "report.md"),
+            "--json-path",
+            str(json_path),
+        ]
+    )
+
+    assert exit_code == 1
+    payload = json.loads(json_path.read_text())
+    assert payload["base"] == "base-sha"
+    assert payload["head"] == "head-sha"
+    assert payload["fail_on"] == "medium"
+    assert payload["files_changed"] == [
+        {"path": "foo.py", "status": "M", "additions": 2, "deletions": 0}
+    ]
+    finding_summaries = [
+        (f["rule_id"], f["severity"], f["kind"]) for f in payload["findings"]
+    ]
+    assert ("TEST_FIRES_001", "medium", "violation") in finding_summaries
 
 
 def test_github_warning_and_notice_escape_command_data(capsys) -> None:

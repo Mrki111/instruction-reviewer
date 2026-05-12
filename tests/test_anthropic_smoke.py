@@ -57,3 +57,13 @@ def test_live_compliance_call_succeeds() -> None:
     # Asserting we got a list back proves the SDK call shape, the
     # output_config/json_schema contract, and our parser all still work.
     assert isinstance(findings, list)
+
+    # The token-usage diagnostic must be present: it proves response.usage
+    # still exposes input_tokens/output_tokens with the expected types. If
+    # the SDK ever renames these fields or changes their types, the
+    # diagnostic silently disappears, which would mask the drift.
+    diagnostics = [f for f in findings if f.kind == "diagnostic"]
+    assert len(diagnostics) == 1
+    usage = diagnostics[0].metadata["usage"]
+    assert usage.get("input_tokens", 0) > 0
+    assert "output_tokens" in usage

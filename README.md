@@ -136,6 +136,16 @@ The default `fail-on: medium` blocks default LLM instruction violations. Use `fa
 
 The report header includes an `LLM tokens:` line summing input/output/cache-read/cache-create across all per-scope calls, so you can verify both cost and that the prompt cache is actually working. The same numbers are emitted as a `kind: "diagnostic"` finding with `metadata.usage` in the JSON report (`--json-path`); diagnostics never count toward the `fail-on` threshold.
 
+### JSON output (`--json-path`)
+
+Findings in the `--json-path` file include a `kind` field that JSON consumers should branch on:
+
+- `"violation"` — a real finding. Counts toward severity totals and the `fail-on` gate.
+- `"skipped"` — the rule could not run (fail-open: missing API key, oversize diff, possible secret in the payload, Anthropic error). Surfaced so the run is not silently empty; not counted toward `fail-on`.
+- `"diagnostic"` — observability records such as LLM token usage. Filtered out of severity counts, the by-severity table, and the `fail-on` gate.
+
+Filter on `kind == "violation"` if you only want real findings.
+
 ## Customizing rules
 
 Rules merge **by id**. To tweak the bundled rule's config or register a custom rule, drop this file into the consumer repo at `.github/instruction-rules.json`:
@@ -154,7 +164,7 @@ Rules merge **by id**. To tweak the bundled rule's config or register a custom r
 }
 ```
 
-Fields you don't set inherit from the default. Unknown ids are appended and reported as warnings unless a custom checks module registers an implementation.
+Fields you don't set inherit from the matching bundled default — so `{ "id": "INSTRUCTIONS_COMPLIANCE_001", "max_diff_chars": 400000 }` keeps the bundled `severity`, `model`, etc. Unknown ids are appended as a fresh rule (no default to inherit from) and reported as warnings unless a custom checks module registers an implementation; an unknown id with only `{ "id": "TEAM_001" }` defaults to `enabled: true`, `severity: medium`.
 
 You can also pass `rules:` explicitly if a project keeps rule overrides somewhere else.
 
@@ -229,7 +239,8 @@ The CLI exits non-zero if any finding is at or above `--fail-on` (default `mediu
 │   ├── __init__.py
 │   ├── __main__.py                  # `python -m reviewer`
 │   ├── cli.py                       # argparse + orchestration
-│   ├── checks.py                    # rule implementations + Finding + severity gate
+│   ├── checks.py                    # Finding, severity gate, secret-pattern helpers, registration
+│   ├── llm_check.py                 # INSTRUCTIONS_COMPLIANCE_001 (the only registered rule)
 │   ├── diff.py                      # build_pr_diff(base, head) via git
 │   ├── rules.py                     # load + merge by id
 │   ├── default-rules.json           # bundled defaults
