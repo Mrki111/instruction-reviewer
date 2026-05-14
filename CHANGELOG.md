@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-05-14
+
+### Added
+- `LICENSE` (MIT) and `SECURITY.md` at the repo root. `SECURITY.md` lists the disclosure contact plus an in-scope list mapped to the project's trust boundaries: base-ref pinning of rules and custom checks, `pull_request_target` hardening, prompt-injection escaping, pre-flight secret scan, shell-injection sinks, and finding-payload escaping in the sticky comment / Step Summary / JSON report.
+- README now documents prompt-injection escaping in the "Data sent to Anthropic" section, a "Requirements" line (Python 3.11+, `ANTHROPIC_API_KEY`, `pull-requests: write`), an "Example report" sample of the rendered sticky comment, a "Troubleshooting" section keyed off the report's `LLM compliance:` header line, and a "Security and license" footer linking the two new files.
+- Portfolio case study at `docs/CASE_STUDY.md` covering trust-boundary engineering decisions, measured cold/warm cache cost on a pinned commit, test/coverage summary, and the self-demonstration PR result.
+
+### Changed
+- `INSTRUCTIONS_COMPLIANCE_001` compliance prompt tightened in `reviewer/llm_check.py`. The "do not flag" list now says "Rules the diff follows correctly — only return violations, never compliance" instead of the ambiguous bare "Compliance"; `path` requires a path that appears in the diff with `null` reserved for commit-message or non-file violations; `line` requires the new-side line number of a `+` line you can actually see; severity calibration disambiguates `high` (NEVER / MUST NOT or security / correctness / data-loss) from `medium` (other firm requirements without security impact). Intended to reduce ambiguous-rule false positives at the merge gate.
+- `LLM compliance:` status line in the markdown report now uses a colon separator (`skipped: <reason>` and `... some scope(s) skipped: <reason>`) so it matches the troubleshooting bullets in README. Previously used an em-dash separator that did not match the documented strings.
+
+### Fixed
+- README workflow snippets and custom-check examples now reference `Mrki111/instruction-reviewer@v0` (the actual repository owner). Previously referenced `infinum/instruction-reviewer@v0`, which would 404 for anyone copy-pasting the Quick start.
+
 ## [0.4.1] - 2026-05-12
 
 ### Fixed
