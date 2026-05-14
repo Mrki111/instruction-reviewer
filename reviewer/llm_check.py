@@ -60,19 +60,19 @@ Do NOT flag:
 - Rules about developer workflow that cannot be verified from a diff alone (e.g. "always run tests before pushing", "use ripgrep over grep in your terminal", "ask the user before X"). These rules govern the human's process, not the code that lands.
 - Style preferences the diff does not take a position on.
 - Rules about absent code (e.g. "don't add abstractions" — if no abstractions were added, do not flag the rule).
-- Compliance — only return violations.
+- Rules the diff follows correctly — only return violations, never compliance.
 
 For each violation, return:
 - rule_excerpt: a short verbatim quote of the rule from the instructions (max ~200 chars).
 - severity: low | medium | high.
 - message: 1-2 sentences naming the violation and pointing at where it happens.
-- path: the repo-relative file path where the violation occurs, or null if not file-specific.
-- line: the new-side line number from the diff (right side, after the change), or null.
+- path: the repo-relative file path where the violation occurs. Must be a path that appears in the diff. Use null for violations in commit messages or violations not tied to a specific file.
+- line: the line number of the offending '+' line in the diff (new-side, after the change). Only use a line number you can see on a '+' line; if you cannot identify one, return null.
 
 Severity calibration:
-- high: violates an explicit MUST NOT / NEVER rule, OR violates a rule about security, correctness, or data loss.
-- medium: violates an explicit MUST / ALWAYS rule that is not security-critical.
-- low: violates a soft preference ("prefer", "consider"), or violates a clear rule with very minimal impact.
+- high: the rule explicitly says NEVER / MUST NOT, OR the violation concerns security, correctness, or data loss.
+- medium: any other firm requirement or prohibition ("must", "always", "do not", "avoid", "don't") without security / correctness / data-loss impact.
+- low: a soft preference ("prefer", "consider"), or a clear rule with very minimal impact.
 
 Be precise. If multiple parts of the diff violate the same rule, return one finding per location.
 
