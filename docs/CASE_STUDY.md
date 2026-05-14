@@ -1,6 +1,6 @@
-# Instruction Reviewer — case study
+# Instruction Reviewer: case study
 
-A GitHub Action and Python CLI that uses Claude to verify whether a pull request's diff actually followed the rules written in `AGENTS.md` / `CLAUDE.md`. Built to turn instruction files from passive guidance into an enforceable CI signal — primarily for teams using AI-assisted development, where the agent itself wrote the diff and may have ignored the rules it was given.
+A GitHub Action and Python CLI that uses Claude to verify whether a pull request's diff actually followed the rules written in `AGENTS.md` / `CLAUDE.md`. Built to turn instruction files from passive guidance into an enforceable CI signal, primarily for teams using AI-assisted development, where the agent itself wrote the diff and may have ignored the rules it was given.
 
 - **Status:** v0.4.1 (pre-1.0)
 - **Source:** [Mrki111/instruction-reviewer](https://github.com/Mrki111/instruction-reviewer)
@@ -11,7 +11,7 @@ A GitHub Action and Python CLI that uses Claude to verify whether a pull request
 
 ## Problem
 
-`CLAUDE.md` and `AGENTS.md` files have become the standard way to give coding assistants project-specific rules ("don't import this at module top level", "all instruction-file content sent to the LLM must be HTML-escaped", "default `fail-on` is `medium` — do not change without a major-version bump"). The files are read by the assistant when it generates code, but nothing in CI verifies that the generated code actually obeyed them. Human reviewers can't reliably hold dozens of repo-specific rules in their head while reviewing a 30-file PR.
+`CLAUDE.md` and `AGENTS.md` files have become the standard way to give coding assistants project-specific rules ("don't import this at module top level", "all instruction-file content sent to the LLM must be HTML-escaped", "default `fail-on` is `medium`; do not change without a major-version bump"). The files are read by the assistant when it generates code, but nothing in CI verifies that the generated code actually obeyed them. Human reviewers can't reliably hold dozens of repo-specific rules in their head while reviewing a 30-file PR.
 
 The result is silent drift: the rules are written down, the assistant claims to follow them, the human reviewer doesn't catch the deviation, and the repo slowly diverges from its own documented standards.
 
@@ -23,7 +23,7 @@ On every PR, a single bundled rule (`INSTRUCTIONS_COMPLIANCE_001`) sends three t
 2. The unified diff of the PR, scoped to files under each instruction's directory.
 3. The PR's commit messages.
 
-Claude returns a JSON list of violations validated against a `json_schema`. Each violation has a rule excerpt, severity, file path, and line number — line numbers are validated against the actual changed lines before any inline annotation is emitted, so the model cannot make up positions.
+Claude returns a JSON list of violations validated against a `json_schema`. Each violation has a rule excerpt, severity, file path, and line number. Line numbers are validated against the actual changed lines before any inline annotation is emitted, so the model cannot make up positions.
 
 Output surfaces in three places without further configuration:
 
@@ -39,11 +39,11 @@ A `fail-on` threshold (default `medium`) makes the rule a real merge gate, not j
 
 The interesting parts of the project are the trust boundaries and the cost/UX tradeoffs, not the LLM call itself.
 
-### 1. Base-ref pinning — a PR cannot relax its own rules
+### 1. Base-ref pinning: a PR cannot relax its own rules
 
 The most important security property of the project. Instruction files, rule config (`.github/instruction-rules.json`), and custom check modules (`--checks-module`) are all read from the PR **base** ref via `git show <base-sha>:<path>`, never from the PR head checkout.
 
-Without this, a malicious PR could simply rewrite `CLAUDE.md` to say "no rules" or delete the instruction-rules file, and the review would happily run against the relaxed config. With base-ref pinning, the rules that gate the merge are the rules from the branch being merged into — which is exactly what a reviewer expects.
+Without this, a malicious PR could simply rewrite `CLAUDE.md` to say "no rules" or delete the instruction-rules file, and the review would happily run against the relaxed config. With base-ref pinning, the rules that gate the merge are the rules from the branch being merged into, which is exactly what a reviewer expects.
 
 This is enforced in code, not by convention: `read_file_at_ref` is the only path for repo-relative reads, and the CLAUDE.md in this repo explicitly forbids reintroducing head-ref reads.
 
@@ -55,7 +55,7 @@ This caught a real test fixture in this very repo during measurement: an early r
 
 ### 3. `pull_request_target` hardening
 
-Custom check modules are arbitrary Python loaded from the checkout. When the Action runs under `pull_request_target` — the GitHub event that *does* expose secrets to fork PRs — the `--checks-module` flag is disabled outright. The bundled LLM check still runs, but a fork PR cannot ship a Python file that gets executed with access to the org's `ANTHROPIC_API_KEY` and `GITHUB_TOKEN`.
+Custom check modules are arbitrary Python loaded from the checkout. When the Action runs under `pull_request_target`, the GitHub event that *does* expose secrets to fork PRs, the `--checks-module` flag is disabled outright. The bundled LLM check still runs, but a fork PR cannot ship a Python file that gets executed with access to the org's `ANTHROPIC_API_KEY` and `GITHUB_TOKEN`.
 
 `action.yml` also passes every user input through an environment variable into the shell step, rather than interpolating `${{ inputs.x }}` directly into the `run:` block. Direct interpolation is a textbook shell-injection sink.
 
@@ -71,7 +71,7 @@ The rule's configured `severity: medium` is a **maximum** the LLM can emit. If t
 
 The instruction files are sent as a `cache_control: ephemeral` block. The diff and commits are sent separately. Result: subsequent PRs in the same repo within the 5-minute TTL pay roughly 10× less for the instruction tokens. This matters because instruction files are the largest, slowest-changing part of the payload.
 
-The report header surfaces `LLM tokens: X in (Y cached, Z% hit rate) / N out` so the cache can be verified to actually be working — a regression that silently disables caching is otherwise invisible.
+The report header surfaces `LLM tokens: X in (Y cached, Z% hit rate) / N out` so the cache can be verified to actually be working. A regression that silently disables caching is otherwise invisible.
 
 ### 7. Fail-open by default, fail-closed by config
 
@@ -92,11 +92,11 @@ All numbers from running the CLI against this repo, May 2026, model `claude-sonn
 | Output tokens                       | 10           | 9                                 |
 | **Estimated cost** (Sonnet 4.6 list)| **~$0.011**  | **~$0.0034**                      |
 
-Test PR: a single-file, 12-line change to `reviewer/llm_check.py` (the most recent commit on `master`), reviewed against a 4.9 KB `CLAUDE.md`.
+Test PR: a single-file, 12-line change to `reviewer/llm_check.py` (commit `a21a8a1`, "upgrade the compliance prompt"), reviewed against a 4.9 KB `CLAUDE.md`.
 
 The cache cuts review cost ~3× on this small PR, because the instruction block (cacheable) dominates the prompt relative to the tiny diff. For larger PRs the diff portion grows but the instruction block stays cached, so the per-PR cost approaches `(diff_tokens × input_price) + output` after the first run in the TTL window.
 
-For a typical larger PR (50 KB scoped diff, ~5 KB instruction file) the README quotes "a few cents per run." This measurement is consistent with that ceiling — the dominant input cost above is the (now-cached) instruction file, not the diff.
+For a typical larger PR (50 KB scoped diff, ~5 KB instruction file) the README quotes "a few cents per run." This measurement is consistent with that ceiling. The dominant input cost above is the (now-cached) instruction file, not the diff.
 
 ### Test suite and coverage
 
@@ -109,9 +109,9 @@ For a typical larger PR (50 KB scoped diff, ~5 KB instruction file) the README q
 
 Three workflows in `.github/workflows/`:
 
-- `test.yml` — pytest on every push to `master` and every PR.
-- `smoke.yml` — daily cron + `workflow_dispatch`, runs the live Anthropic call.
-- `release.yml` — on a `vX.Y.Z` tag push, verifies the tag matches `pyproject.toml`, creates a GitHub Release, and force-updates the `vX` major-version tag that consumers pin to.
+- `test.yml`: pytest on every push to `master` and every PR.
+- `smoke.yml`: daily cron + `workflow_dispatch`, runs the live Anthropic call.
+- `release.yml`: on a `vX.Y.Z` tag push, verifies the tag matches `pyproject.toml`, creates a GitHub Release, and force-updates the `vX` major-version tag that consumers pin to.
 
 All third-party Actions are pinned to commit SHAs (not floating tags) in both `action.yml` and the workflow files.
 
@@ -174,7 +174,7 @@ Result on the PR:
 
   > A top-level `import anthropic` is added in `reviewer/cli.py` at line 14, directly violating the rule that `anthropic` must only be imported locally inside `check_instructions_compliance`. (rule: Do not import `anthropic` at module top level. It must remain a local import inside `check_instructions_compliance` so non-LLM CLI runs do not require the SDK.)
 
-- Token usage on the run (cold cache): **3,564 input / 120 output** on `claude-sonnet-4-6` — about $0.012.
+- Token usage on the run (cold cache): **3,564 input / 120 output** on `claude-sonnet-4-6`, about $0.012.
 
 The split between the two checks is the point: tests confirm code correctness, the reviewer confirms convention compliance. They catch different classes of regression and they should both be required for merge.
 

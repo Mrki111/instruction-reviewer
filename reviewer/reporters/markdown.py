@@ -141,11 +141,11 @@ def _llm_status_line(
     skipped = [f for f in rule_findings if f.kind == "skipped"]
     violations = [f for f in rule_findings if f.kind == "violation"]
     if skipped and not violations:
-        return f"skipped — {skipped[0].message}"
+        return f"skipped: {skipped[0].message}"
     if skipped and violations:
         return (
             f"ran with {len(violations)} violation(s); "
-            f"some scope(s) skipped — {skipped[0].message}"
+            f"some scope(s) skipped: {skipped[0].message}"
         )
     if violations:
         return f"ran ({len(violations)} violation(s) reported)"
