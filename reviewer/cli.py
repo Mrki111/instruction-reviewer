@@ -11,6 +11,8 @@ import sys
 import types
 from pathlib import Path
 
+import anthropic
+
 from reviewer.checks import (
     CheckConfigurationError,
     _match_any,
