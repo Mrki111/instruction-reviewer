@@ -2,7 +2,7 @@
 
 A GitHub Action and Python CLI that uses Claude to verify whether a pull request's diff actually followed the rules written in `AGENTS.md` / `CLAUDE.md`. Built to turn instruction files from passive guidance into an enforceable CI signal, primarily for teams using AI-assisted development, where the agent itself wrote the diff and may have ignored the rules it was given.
 
-- **Status:** v0.4.1 (pre-1.0)
+- **Status:** v0.4.2 (pre-1.0)
 - **Source:** [Mrki111/instruction-reviewer](https://github.com/Mrki111/instruction-reviewer)
 - **Install:** `uses: Mrki111/instruction-reviewer@v0` in a workflow file (no Marketplace listing yet)
 - **Stack:** Python 3.11+, Anthropic SDK, GitHub Actions composite action, no other runtime deps
